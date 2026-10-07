@@ -2,7 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
-
+import { Button } from '@/components/ui/button'
 export default function Home() {
 
   const { data } = useSession();
@@ -12,7 +12,7 @@ export default function Home() {
   return (
     <>
     <h1>Hello</h1>
-    <button onClick={() => signOut()}>Signout</button>
+    <Button onClick={() => signOut()}>Signout</Button>
     
     </>
     
