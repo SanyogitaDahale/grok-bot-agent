@@ -1,0 +1,5 @@
+import { CONNECTABLE_TOOLS } from './agent-data';
+
+export default function ToolsTab() {
+  return <div><h3 className="mb-4 text-sm font-semibold text-slate-800">Connect your tools</h3><div className="space-y-2">{CONNECTABLE_TOOLS.map(({ name, detail, icon: Icon, tint }) => <div key={name} className="flex items-center gap-3 rounded-xl border border-blue-100 bg-white/90 p-3 shadow-sm shadow-blue-100/50 transition hover:border-blue-300 hover:shadow-blue-100"><span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${tint}`}><Icon className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-sm font-medium text-slate-800">{name}</p><p className="mt-0.5 truncate text-[12px] text-slate-500">{detail}</p></div><button type="button" className="h-7 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-[12px] font-medium text-blue-900 transition hover:bg-blue-100">Connect</button></div>)}</div><p className="mt-3 text-center text-[12px] text-slate-400">Connect apps to give your agent more context.</p></div>;
+}
