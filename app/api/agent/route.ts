@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   if (agentId) {
     const agentConfig = await db.select().from(AgentConfig)
       .where(and(eq(AgentConfig.userEmail, session.user.email),
-        eq(AgentConfig.agentId, agentId)))
+        eq(AgentConfig.agentid, agentId)))
 
     return NextResponse.json(agentConfig[0]);
 
@@ -80,4 +80,32 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ agentConfig })
 
+}
+
+
+export async function PUT(req: NextRequest) {
+  const agentConfig = await req.json();
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  // Update the Agent Config Record
+  const result = await db.update(AgentConfig)
+    .set({
+      name: agentConfig.name,
+      description: agentConfig.description,
+      agentImage: agentConfig.agentImage,
+    })
+    .where(and(
+      eq(AgentConfig.userEmail, session.user.email),
+      eq(AgentConfig.agentid, agentConfig.agentId)
+    ))
+    .returning()
+
+  return NextResponse.json({ message: "Agent Configuration Updated successfully", agentConfig: result[0] })
 }

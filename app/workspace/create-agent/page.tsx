@@ -70,7 +70,7 @@ export default function CreateAgent() {
           >
             <img
               key={avatarSeed}
-              src={`https://api.dicebear.com/10.x/gaze/svg?tags=animation&seed=${encodeURIComponent(avatarSeed)}`}
+              src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(avatarSeed)}`}
               alt="Agent avatar"
               className="size-24 rounded-full bg-slate-50 object-cover ring-1 ring-slate-200"
             />

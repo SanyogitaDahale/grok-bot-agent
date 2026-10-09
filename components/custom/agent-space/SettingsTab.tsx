@@ -1,5 +1,41 @@
-import { Zap } from 'lucide-react';
+'use client';
+
+import { useContext } from 'react';
+import { AgentConfigContext } from '@/context/AgentConfigContext';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function SettingsTab() {
-  return <div className="space-y-5"><label className="block"><span className="mb-2 block text-sm font-semibold text-slate-700">Agent Description &amp; Instructions</span><textarea rows={6} defaultValue={'A thoughtful assistant for planning projects, organizing priorities, and keeping your work moving.\n\nBe clear, practical, and supportive. Help break larger tasks into manageable steps.'} className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-5 text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label><div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-slate-100 p-3.5"><div className="flex items-center gap-2 text-sm font-medium text-blue-950"><Zap className="size-3.5 text-blue-700" />Helpful tip</div><p className="mt-1.5 text-[13px] leading-5 text-slate-500">Include the agent&apos;s role, tone, and the tasks it should handle.</p></div></div>;
+  const { agentConfig, setAgentConfig } = useContext(AgentConfigContext)!;
+  const description = agentConfig?.description ?? '';
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="agent-instructions">Description &amp; Instructions</Label>
+        <span className="text-xs text-muted-foreground">
+          {description.length} / 2,000
+        </span>
+      </div>
+      <Textarea
+        id="agent-instructions"
+        value={description}
+        maxLength={2000}
+        rows={10}
+        className="min-h-50 resize-y text-base"
+        onChange={(event) => {
+          // const name = e.target.value;
+
+          setAgentConfig((prevConfig: any) => ({
+            ...prevConfig,
+            description: event.target.value
+
+          }))
+        }}
+      />
+      <p className="text-s leading-5 text-muted-foreground">
+        Describe what this agent does and how it should respond.
+      </p>
+    </div>
+  );
 }

@@ -92,8 +92,8 @@ function AppSidebar() {
                     {agents.map((agent) => (
                         <li key={agent.agentid}>
                             <Link
-                                href={`/workspace/agents/${agent.agentid}`}
-                                className={`group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition ${path === `/workspace/agents/${agent.agentid}`
+                                href={`/workspace/${agent.agentid}`}
+                                className={`group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition ${path === `/workspace/${agent.agentid}`
                                         ? 'bg-slate-100 font-medium text-slate-950'
                                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                                     }`}
