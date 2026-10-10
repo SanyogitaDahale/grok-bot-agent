@@ -4,6 +4,7 @@ import { useContext, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { AgentConfigContext } from '@/context/AgentConfigContext';
 import { AGENT_AVATAR_URL } from './agent-data';
+import type { AgentConfigType } from '@/type/agent';
 
 export default function AgentAvatar() {
   const context = useContext(AgentConfigContext);
@@ -30,7 +31,7 @@ export default function AgentAvatar() {
   const newAvatarUrl =
     `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(avatarSeed)}`;
 
-  setAgentConfig((prev) =>
+  setAgentConfig((prev: AgentConfigType | null) =>
     prev ? { ...prev, agentImage: newAvatarUrl } : prev
   );
 };

@@ -1,14 +1,71 @@
-
 "use client";
 import {ArrowUp, Copy, Loader, MoreHorizontal, RefreshCw, Sparkles,} from "lucide-react";
-import { useContext, useState } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { AGENT_AVATAR_URL } from "./agent-data";
 import type { MessageType } from "@/type/Message";
+import { AgentResponseView } from "./AgentResponseView";
 import axios from "axios";
 import { toast } from "@/components/ui/toast";
 import { AgentConfigContext } from "@/context/AgentConfigContext";
 import type { AgentConfigType } from "@/type/agent";
+import type { AgentResponse } from "@/lib/openai/agent-response-schema";
+import type { ToolSuggestionCardData } from "@/type/Message";
+
+function AgentMessage({
+  children,
+  time,
+  agentAvatar,
+  agentName,
+  copyText,
+}: {
+  children: ReactNode;
+  time: string;
+  agentAvatar: string;
+  agentName: string;
+  copyText: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <img
+        src={agentAvatar}
+        alt={agentName || "Agent avatar"}
+        className="mt-0.5 size-8 shrink-0 rounded-lg border border-blue-100 bg-white ring-2 ring-blue-50"
+      />
+
+      <div className="min-w-0 max-w-[84%]">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-sm font-semibold text-blue-950">
+            {agentName}
+          </span>
+          <span className="text-[13px] text-slate-400">{time}</span>
+        </div>
+
+        <div className="whitespace-pre-wrap text-[15px] leading-6 text-slate-600">
+          {children}
+        </div>
+
+        <div className="mt-3 flex items-center gap-1 text-slate-400">
+          <button
+            type="button"
+            aria-label="Copy response"
+            onClick={() => navigator.clipboard.writeText(copyText)}
+            className="rounded-md p-1.5 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <Copy className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Regenerate response"
+            className="rounded-md p-1.5 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <RefreshCw className="size-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ChatHeader({ agentConfig }: { agentConfig: AgentConfigType | null }) {
   return (
@@ -64,46 +121,14 @@ function Conversation({
       {messages.map((msg) => (
         <div key={msg.id}>
           {msg.role === "agent" ? (
-            <div className="flex items-start gap-3">
-              <img
-                src={agentConfig?.agentImage || AGENT_AVATAR_URL}
-                alt={agentConfig?.name || "Agent avatar"}
-                className="mt-0.5 size-8 shrink-0 rounded-lg border border-blue-100 bg-white ring-2 ring-blue-50"
-              />
-
-              <div className="min-w-0 max-w-[84%]">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-sm font-semibold text-blue-950">
-                    {agentConfig?.name || "Orbit Assistant"}
-                  </span>
-                  <span className="text-[13px] text-slate-400">
-                    {msg.time}
-                  </span>
-                </div>
-
-                <div className="whitespace-pre-wrap text-[15px] leading-6 text-slate-600">
-                  {msg.content}
-                </div>
-
-                <div className="mt-3 flex items-center gap-1 text-slate-400">
-                  <button
-                    type="button"
-                    aria-label="Copy response"
-                    onClick={() => navigator.clipboard.writeText(msg.content)}
-                    className="rounded-md p-1.5 hover:bg-slate-100 hover:text-slate-600"
-                  >
-                    <Copy className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Regenerate response"
-                    className="rounded-md p-1.5 hover:bg-slate-100 hover:text-slate-600"
-                  >
-                    <RefreshCw className="size-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AgentMessage
+              time={msg.time}
+              agentAvatar={agentConfig?.agentImage || AGENT_AVATAR_URL}
+              agentName={agentConfig?.name || "Orbit Assistant"}
+              copyText={msg.response?.message || msg.content}
+            >
+              <AgentResponseView message={msg} />
+            </AgentMessage>
           ) : (
             <div className="flex justify-end">
               <div className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-blue-800 via-blue-900 to-slate-950 px-4 py-3 text-[15px] leading-6 text-white shadow-[0_8px_24px_rgba(15,39,120,0.28)]">
@@ -205,7 +230,7 @@ export default function ChatPanel() {
       id: "Hello! Welcome to Orbit",
       role: "agent",
       content: "Hello! I am Agent, how can I help you today?",
-      time: new Date().toString(),
+      time: "Just now",
     },
   ]);
 
@@ -229,21 +254,35 @@ const handleMessageSend = async () => {
   setLoading(true);
 
   try {
-    const { data } = await axios.post<{ response: string }>(
+    const { data } = await axios.post<{
+      response: AgentResponse;
+      toolCards?: ToolSuggestionCardData[];
+    }>(
       "/api/agent/chat",
       {
         agentId,
-        messages: updatedMsgs.map(({ role, content }) => ({
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        messages: updatedMsgs.map(({ role, content, response }) => ({
           role,
-          content,
+          content:
+            response?.type === "clarification"
+              ? [
+                  response.message,
+                  ...response.questions.map((item) => item.question),
+                ].join("\n")
+              : content,
         })),
       }
     );
 
+    const response = data.response;
+
     const agentMsg: MessageType = {
       id: crypto.randomUUID(),
       role: "agent",
-      content: data.response,
+      content: response.message,
+      response,
+      toolCards: data.toolCards ?? [],
       time: new Date().toLocaleTimeString(),
     };
 
@@ -253,7 +292,10 @@ const handleMessageSend = async () => {
 
     toast.add({
       type: "error",
-      title: "Internal Server Error",
+      title: "Could not send message",
+      description: axios.isAxiosError<{ error?: string }>(error)
+        ? error.response?.data?.error ?? "Please try again."
+        : "Please try again.",
     });
   } finally {
     setLoading(false);
