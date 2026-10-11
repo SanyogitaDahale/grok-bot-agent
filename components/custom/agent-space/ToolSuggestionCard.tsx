@@ -1,31 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import axios from "axios";
-import { Check, ExternalLink, Loader, Puzzle } from "lucide-react";
+import { ExternalLink, Loader, Puzzle, Unplug } from "lucide-react";
 import type { ToolSuggestionCardData } from "@/type/Message";
+import { connectToolInPopup } from "./tool-connection";
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+  if (
+    axios.isAxiosError<{ error?: string }>(error) &&
+    typeof error.response?.data?.error === "string"
+  ) {
+    return error.response.data.error;
+  }
+
+  if (error instanceof Error) return error.message;
+
+  return fallback;
+}
 
 export function ToolSuggestionCard({ tool }: { tool: ToolSuggestionCardData }) {
   const { agentId } = useParams<{ agentId: string }>();
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [checkingConnection, setCheckingConnection] = useState(true);
+  const [isConnected, setIsConnected] = useState(tool.isConnected);
   const [error, setError] = useState("");
 
+  const getConnectionStatus = useCallback(async () => {
+    const response = await axios.get<{ isConnected: boolean }>(
+      "/api/tools/status",
+      {
+        params: {
+          agentId,
+          toolkitSlug: tool.slug,
+        },
+      },
+    );
+
+    return response.data.isConnected;
+  }, [agentId, tool.slug]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCheckingConnection(true);
+
+    getConnectionStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setIsConnected(status);
+          setError("");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setError(getApiErrorMessage(error, "Could not load connection status."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingConnection(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getConnectionStatus]);
+
   const connectTool = async () => {
-    if (!agentId || connecting || tool.isConnected || !tool.isEnabled) return;
+    if (!agentId || connecting || disconnecting || checkingConnection || isConnected || !tool.isEnabled) return;
 
     setConnecting(true);
     setError("");
 
     try {
-      const { data } = await axios.post<{ redirectUrl: string }>(
-        "/api/agent/tools/connect",
-        { agentId, toolSlug: tool.slug },
-      );
-      window.location.assign(data.redirectUrl);
-    } catch {
-      setError("Could not start the connection. Please try again.");
+      const connected = await connectToolInPopup(agentId, tool.slug);
+      if (connected) {
+        setIsConnected(true);
+      } else {
+        setError("Connection was not completed. Please try again.");
+      }
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Could not start the connection. Please try again."));
+    } finally {
       setConnecting(false);
+    }
+  };
+
+  const disconnectTool = async () => {
+    if (!agentId || connecting || disconnecting || checkingConnection || !isConnected) return;
+
+    setDisconnecting(true);
+    setError("");
+
+    try {
+      await axios.post("/api/tools/disconnect", {
+        agentId,
+        toolkitSlug: tool.slug,
+      });
+      setIsConnected(false);
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Could not disconnect this app. Please try again."));
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -53,7 +130,7 @@ export function ToolSuggestionCard({ tool }: { tool: ToolSuggestionCardData }) {
               <code className="text-[11px] text-slate-500">{tool.slug}</code>
             </div>
             <span className="shrink-0 rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-              {tool.isConnected ? "Connected" : "Unavailable"}
+              {isConnected ? "Connected" : tool.isEnabled ? "Not connected" : "Unavailable"}
             </span>
           </div>
 
@@ -78,21 +155,23 @@ export function ToolSuggestionCard({ tool }: { tool: ToolSuggestionCardData }) {
             </span>
             <button
               type="button"
-              onClick={connectTool}
-              disabled={connecting || tool.isConnected || !tool.isEnabled}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={isConnected ? disconnectTool : connectTool}
+              disabled={connecting || disconnecting || checkingConnection || (!isConnected && !tool.isEnabled)}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60 ${isConnected ? "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50" : "bg-blue-600 text-white hover:bg-blue-700"}`}
             >
-              {connecting ? (
+              {connecting || disconnecting ? (
                 <Loader className="size-3.5 animate-spin" aria-hidden="true" />
-              ) : tool.isConnected ? (
-                <Check className="size-3.5" aria-hidden="true" />
+              ) : isConnected ? (
+                <Unplug className="size-3.5" aria-hidden="true" />
               ) : (
                 <ExternalLink className="size-3.5" aria-hidden="true" />
               )}
               {connecting
                 ? "Connecting..."
-                : tool.isConnected
-                  ? "Connected"
+                : disconnecting
+                  ? "Disconnecting..."
+                  : isConnected
+                    ? "Disconnect"
                   : "Connect"}
             </button>
           </div>

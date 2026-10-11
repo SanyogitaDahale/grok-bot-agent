@@ -11,12 +11,7 @@ export async function getOrCreateAgentSession(agentConfig: AgentSessionConfig, u
     const composio = getComposio();
 
     if (agentConfig.composioSessionId) {
-        try {
-            return await composio.sessions.use(agentConfig.composioSessionId);
-        }
-        catch {
-            console.warn("Could not reuse Composio session; creating a new one.");
-        }
+        return await composio.sessions.use(agentConfig.composioSessionId);
     }
 
     const toolSlugs = Array.isArray(agentConfig.tools)
