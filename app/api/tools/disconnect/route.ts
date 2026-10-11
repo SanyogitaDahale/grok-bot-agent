@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/db";
 import { AgentConfig, Tools } from "@/db/schema";
 import { ComposioConfigurationError, getComposio } from "@/lib/composio/composio";
+import { getFallbackToolkit } from "@/lib/composio/tool-catalog";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +31,6 @@ export async function POST(request: NextRequest) {
     const [agent] = await db
       .select({
         agentid: AgentConfig.agentid,
-        tools: AgentConfig.tools,
         composioSessionId: AgentConfig.composioSessionId,
       })
       .from(AgentConfig)
@@ -46,43 +46,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
-    const [tool] = await db
+    const [registeredTool] = await db
       .select({ slug: Tools.slug })
       .from(Tools)
-      .where(eq(Tools.slug, toolkitSlug))
+      .where(sql`lower(${Tools.slug}) = lower(${toolkitSlug})`)
       .limit(1);
-    if (!tool) {
+    const fallbackTool = getFallbackToolkit(toolkitSlug);
+    if (!registeredTool && !fallbackTool) {
       return NextResponse.json({ error: "Tool not found" }, { status: 404 });
     }
+    const toolSlug = (registeredTool?.slug ?? fallbackTool!.slug).toLowerCase();
 
     const composio = getComposio();
     const result = await composio.connectedAccounts.list({
       userIds: [session.user.email],
-      toolkitSlugs: [tool.slug],
+      toolkitSlugs: [toolSlug],
       statuses: ["ACTIVE"],
     });
     const ownedAccounts = result.items.filter(
-      (account: any) => account.toolkit?.slug?.toLowerCase() === tool.slug.toLowerCase(),
+      (account: any) => account.toolkit?.slug?.toLowerCase() === toolSlug.toLowerCase(),
     );
 
     await Promise.all(
       ownedAccounts.map((account: any) => composio.connectedAccounts.revoke(account.id)),
     );
 
-    const configuredTools = Array.isArray(agent.tools)
-      ? agent.tools.filter((item): item is string => typeof item === "string")
-      : [];
-    const remainingTools = configuredTools.filter((slug) => slug !== tool.slug);
-
-    if (agent.composioSessionId) {
-      const composioSession = await composio.sessions.use(agent.composioSessionId);
-      await composioSession.update({ toolkits: remainingTools });
-    }
-
     await db
       .update(AgentConfig)
       .set({
-        tools: remainingTools,
+        tools: sql`COALESCE(${AgentConfig.tools}, '[]'::jsonb) - ${toolSlug}`,
       })
       .where(
         and(
@@ -90,6 +82,19 @@ export async function POST(request: NextRequest) {
           eq(AgentConfig.userEmail, session.user.email),
         ),
       );
+
+    if (agent.composioSessionId) {
+      const [updatedAgent] = await db
+        .select({ tools: AgentConfig.tools })
+        .from(AgentConfig)
+        .where(eq(AgentConfig.agentid, agent.agentid))
+        .limit(1);
+      const remainingTools = Array.isArray(updatedAgent?.tools)
+        ? updatedAgent.tools.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase())
+        : [];
+      const composioSession = await composio.sessions.use(agent.composioSessionId);
+      await composioSession.update({ toolkits: remainingTools });
+    }
 
     return NextResponse.json({ disconnected: true });
   } catch (error) {

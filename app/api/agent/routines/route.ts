@@ -1,10 +1,37 @@
 import { db } from "@/db";
 import { AgentConfig, Routines, Tools } from "@/db/schema";
 import { routineSchema } from "@/lib/openai/agent-response-schema";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "../../auth/[...nextauth]/route";
+import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email;
+    if (!userEmail) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const agentId = req.nextUrl.searchParams.get("agentId");
+    if (!agentId) {
+      return NextResponse.json({ error: "An agent ID is required" }, { status: 400 });
+    }
+
+    const routines = await db
+      .select()
+      .from(Routines)
+      .where(and(eq(Routines.agentId, agentId), eq(Routines.userEmail, userEmail)))
+      .orderBy(desc(Routines.createdAt));
+
+    return NextResponse.json({ routines });
+  } catch (error) {
+    console.error("Failed to load routines:", error);
+    return NextResponse.json({ error: "Failed to load routines" }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,6 +56,9 @@ export async function POST(req: NextRequest) {
         { error: "The routine details are invalid" },
         { status: 400 },
       );
+    }
+    if (parsedRoutine.data.schedule.frequency === "weekly" && parsedRoutine.data.schedule.weekDays.length === 0) {
+      return NextResponse.json({ error: "Select at least one day for a weekly routine" }, { status: 400 });
     }
 
     const [agent] = await db
@@ -55,7 +85,19 @@ export async function POST(req: NextRequest) {
       })
       .from(Tools)
       .where(eq(Tools.isActive, true));
-    const toolsBySlug = new Map(activeTools.map((tool) => [tool.slug, tool]));
+    const toolsBySlug = new Map<string, { slug: string; name: string; description: string | null; icon: string }>(
+      activeTools.map((tool) => [tool.slug.toLowerCase(), tool]),
+    );
+    for (const tool of FALLBACK_TOOLKITS) {
+      if (!toolsBySlug.has(tool.slug)) {
+        toolsBySlug.set(tool.slug, {
+          slug: tool.slug,
+          name: tool.name,
+          description: tool.description,
+          icon: tool.icon ?? "",
+        });
+      }
+    }
     const requestedSlugs = parsedRoutine.data.tools.map((tool) => tool.slug);
 
     if (new Set(requestedSlugs).size !== requestedSlugs.length) {
@@ -65,7 +107,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const missingTool = requestedSlugs.find((slug) => !toolsBySlug.has(slug));
+    const missingTool = requestedSlugs.find((slug) => !toolsBySlug.has(slug.toLowerCase()));
     if (missingTool) {
       return NextResponse.json(
         { error: `Tool ${missingTool} is unavailable` },
@@ -74,7 +116,7 @@ export async function POST(req: NextRequest) {
     }
 
     const attachedTools = parsedRoutine.data.tools.map((suggestion) => {
-      const tool = toolsBySlug.get(suggestion.slug)!;
+      const tool = toolsBySlug.get(suggestion.slug.toLowerCase())!;
       return {
         ...suggestion,
         name: tool.name,

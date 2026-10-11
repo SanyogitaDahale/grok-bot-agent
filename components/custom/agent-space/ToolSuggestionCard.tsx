@@ -107,16 +107,16 @@ export function ToolSuggestionCard({ tool }: { tool: ToolSuggestionCardData }) {
   };
 
   return (
-    <article className="w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+    <article className="w-full rounded-2xl border border-blue-100 bg-white p-3 shadow-[0_2px_8px_rgba(30,64,175,0.06)]">
       <div className="flex items-start gap-3">
         {tool.icon ? (
           <img
             src={tool.icon}
             alt=""
-            className="size-9 shrink-0 rounded-md border border-slate-200 object-contain p-1"
+            className="size-9 shrink-0 rounded-md border border-blue-100 bg-white object-contain p-1"
           />
         ) : (
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-500">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-700">
             <Puzzle className="size-5" aria-hidden="true" />
           </span>
         )}
@@ -129,19 +129,19 @@ export function ToolSuggestionCard({ tool }: { tool: ToolSuggestionCardData }) {
               </h4>
               <code className="text-[11px] text-slate-500">{tool.slug}</code>
             </div>
-            <span className="shrink-0 rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${isConnected ? "border-emerald-100 bg-emerald-50 text-emerald-700" : tool.isEnabled ? "border-blue-100 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
               {isConnected ? "Connected" : tool.isEnabled ? "Not connected" : "Unavailable"}
             </span>
           </div>
 
           {tool.description && (
-            <p className="mt-1 text-xs leading-4 text-slate-600">
+            <p className="mt-1 text-xs leading-4 text-slate-700">
               {tool.description}
             </p>
           )}
 
-          <div className="mt-3 rounded-lg bg-slate-50 p-2.5">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+          <div className="mt-3 rounded-lg border border-blue-50 bg-gradient-to-br from-blue-50/80 to-slate-50 p-2.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-blue-700">
               Why this tool
             </p>
             <p className="mt-1 text-xs leading-4 text-slate-700">
@@ -150,14 +150,14 @@ export function ToolSuggestionCard({ tool }: { tool: ToolSuggestionCardData }) {
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-slate-500">
+            <span className={`text-[11px] font-medium ${tool.isEnabled ? "text-blue-700" : "text-slate-500"}`}>
               {tool.isEnabled ? "Enabled" : "Unavailable"}
             </span>
             <button
               type="button"
               onClick={isConnected ? disconnectTool : connectTool}
               disabled={connecting || disconnecting || checkingConnection || (!isConnected && !tool.isEnabled)}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60 ${isConnected ? "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-800 bg-gradient-to-r from-blue-700 to-blue-900 px-3 text-xs font-medium text-white shadow-sm shadow-blue-900/15 transition hover:from-blue-800 hover:to-blue-950 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {connecting || disconnecting ? (
                 <Loader className="size-3.5 animate-spin" aria-hidden="true" />

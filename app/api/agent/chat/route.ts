@@ -1,6 +1,6 @@
 
 import { db } from "@/db";
-import { AgentConfig, Tools } from "@/db/schema";
+import { AgentConfig, Routines, Tools } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -16,6 +16,8 @@ import {
 } from "@/lib/composio/composio";
 import { AgentConfigType } from "@/type/agent";
 import type { AgentResponse } from "@/lib/openai/agent-response-schema";
+import { routineSchema } from "@/lib/openai/agent-response-schema";
+import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { agentId, messages, timezone } = body;
+    const { agentId, messages, timezone, routineEditId } = body;
 
     if (
       typeof agentId !== "string" ||
@@ -70,6 +72,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let routineEditInstructions = "";
+    if (typeof routineEditId === "string" && routineEditId) {
+      const [savedRoutine] = await db
+        .select()
+        .from(Routines)
+        .where(and(
+          eq(Routines.id, routineEditId),
+          eq(Routines.agentId, agentId),
+          eq(Routines.userEmail, session.user.email),
+        ))
+        .limit(1);
+
+      if (!savedRoutine) {
+        return NextResponse.json({ error: "Routine not found" }, { status: 404 });
+      }
+
+      const currentRoutine = routineSchema.safeParse({
+        name: savedRoutine.name,
+        goal: savedRoutine.goal,
+        instructions: savedRoutine.instructions,
+        schedule: savedRoutine.schedule,
+        tools: savedRoutine.tools,
+      });
+      if (!currentRoutine.success) {
+        return NextResponse.json({ error: "Saved routine data is invalid" }, { status: 409 });
+      }
+
+      routineEditInstructions = `
+Routine edit mode is active for the existing saved routine below. Current routine data: ${JSON.stringify(currentRoutine.data)}
+The user is changing this routine, not creating a second one. Preserve all fields the user did not ask to change. If a required detail for the requested change is missing, respond with type="clarification" and ask a concise question; use the full conversation history after the user answers. Once you have enough information, respond with type="routine" and return the complete updated routine, including its task-specific instructions, schedule, and tools. Do not ask the user to repeat any current value that can be preserved from the saved routine.
+`.trim();
+    }
+
     if (Array.isArray(agentConfig.tools) && agentConfig.tools.length > 0) {
       const composioSession = await getOrCreateAgentSession(
         agentConfig as unknown as AgentConfigType,
@@ -86,13 +121,43 @@ export async function POST(req: NextRequest) {
     );
 
     //ALl available tools
-    const tools = await db.select().from(Tools).where(eq(Tools.isActive, true));
+    const registeredTools = await db.select().from(Tools).where(eq(Tools.isActive, true));
+    const toolsBySlug = new Map(
+      registeredTools.map((tool) => [tool.slug.toLowerCase(), {
+        slug: tool.slug,
+        name: tool.name,
+        description: tool.description ?? "",
+        icon: tool.icon,
+        isActive: true,
+      }]),
+    );
+    for (const tool of FALLBACK_TOOLKITS) {
+      if (!toolsBySlug.has(tool.slug)) toolsBySlug.set(tool.slug, tool);
+    }
+    const tools = [...toolsBySlug.values()];
 
     const toolsCatalog = tools.map((tool) => ({
       slug: tool.slug,
       name: tool.name,
-      description: tool.description ?? "",
+      description: tool.description,
     }));
+
+    const configuredToolSlugs = Array.isArray(agentConfig.tools)
+      ? agentConfig.tools.filter((tool): tool is string => typeof tool === "string")
+      : [];
+    let connectedAccountsForAgent: Record<string, string[]> = {};
+    if (configuredToolSlugs.length > 0) {
+      try {
+        connectedAccountsForAgent = await getActiveConnectedAccounts(
+          session.user.email,
+          configuredToolSlugs,
+          getComposio(),
+        );
+      } catch {
+        // Keep chat available when Composio has not been configured.
+      }
+    }
+    const connectedToolSlugs = Object.keys(connectedAccountsForAgent);
 
     const latestUserMessage = [...messages]
       .reverse()
@@ -112,25 +177,42 @@ export async function POST(req: NextRequest) {
 
     let response: AgentResponse;
     if (isExplicitConnectRequest && requestedTools.length > 0) {
-      const toolNames = requestedTools.map((tool) => tool.name).join(" and ");
-      response = {
-        type: "tool_connection",
-        message: `Use the cards below to connect ${toolNames}.`,
-        questions: [],
-        routine: null,
-        suggestedTools: requestedTools.map((tool) => ({
-          slug: tool.slug,
-          reason: `${tool.name} needs account access to perform this task.`,
-        })),
-      };
+      const connectedToolSet = new Set(connectedToolSlugs);
+      const toolsToConnect = requestedTools.filter(
+        (tool) => !connectedToolSet.has(tool.slug.toLowerCase()),
+      );
+
+      if (toolsToConnect.length === 0) {
+        const toolNames = requestedTools.map((tool) => tool.name).join(" and ");
+        response = {
+          type: "message",
+          message: `${toolNames} ${requestedTools.length === 1 ? "is" : "are"} already connected to this agent.`,
+          questions: [],
+          suggestedTools: [],
+          routine: null,
+        };
+      } else {
+        const toolNames = toolsToConnect.map((tool) => tool.name).join(" and ");
+        response = {
+          type: "tool_connection",
+          message: `Use the cards below to connect ${toolNames}.`,
+          questions: [],
+          routine: null,
+          suggestedTools: toolsToConnect.map((tool) => ({
+            slug: tool.slug,
+            reason: `${tool.name} needs account access to perform this task.`,
+          })),
+        };
+      }
     } else {
       response = await executeAgentChat(
         agentConfig.name,
-        agentConfig.description ?? "",
+        [agentConfig.description ?? "", routineEditInstructions].filter(Boolean).join("\n\n"),
         chatMessages,
         agentComposioTools,
         toolsCatalog,
         typeof timezone === "string" ? timezone : "UTC",
+        connectedToolSlugs,
       );
     }
 

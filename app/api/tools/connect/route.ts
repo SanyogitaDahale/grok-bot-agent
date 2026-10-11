@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { AgentConfig, Tools } from "@/db/schema";
 import { ComposioConfigurationError, getComposio } from "@/lib/composio/composio";
 import { getActiveConnectedAccounts } from "@/lib/composio/service";
+import { getFallbackToolkit } from "@/lib/composio/tool-catalog";
 
 function isComposioSessionPermissionError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -63,23 +64,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
-    const [tool] = await db
+    const [registeredTool] = await db
       .select({ slug: Tools.slug, isActive: Tools.isActive })
       .from(Tools)
-      .where(eq(Tools.slug, toolkitSlug))
+      .where(sql`lower(${Tools.slug}) = lower(${toolkitSlug})`)
       .limit(1);
 
-    if (!tool) {
+    const fallbackTool = getFallbackToolkit(toolkitSlug);
+    if (!registeredTool && !fallbackTool) {
       return NextResponse.json({ error: "Agent or tool not found" }, { status: 404 });
     }
-    if (!tool.isActive) {
+    if (registeredTool && !registeredTool.isActive) {
       return NextResponse.json({ error: "This tool is unavailable" }, { status: 404 });
     }
+    const toolSlug = (registeredTool?.slug ?? fallbackTool!.slug).toLowerCase();
 
     const configuredTools = Array.isArray(agent.tools)
-      ? agent.tools.filter((item): item is string => typeof item === "string")
+      ? agent.tools.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase())
       : [];
-    const toolSlugs = [...new Set([...configuredTools, tool.slug])];
+    const toolSlugs = [...new Set([...configuredTools, toolSlug])];
     const composio = getComposio();
     const composioSession = await (async () => {
       if (agent.composioSessionId) {
@@ -102,7 +105,6 @@ export async function POST(req: NextRequest) {
     await db
       .update(AgentConfig)
       .set({
-        tools: toolSlugs,
         composioSessionId: composioSession.sessionId,
       })
       .where(
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
         ),
       );
 
-    const request = await composioSession.authorize(tool.slug, {
+    const request = await composioSession.authorize(toolSlug, {
       callbackUrl: `${req.nextUrl.origin}/workspace/${encodeURIComponent(agentId)}`,
     });
 

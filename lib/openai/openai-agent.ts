@@ -31,10 +31,17 @@ export const executeAgentChat = async (
     description: string
 
   }> = [],
-  timeZone = 'UTC'
+  timeZone = 'UTC',
+  connectedToolSlugs: string[] = [],
 ) => {
 
-  const formmatedInstructions = buildAgentInstructions(name, instructions, availableTools, timeZone);
+  const formmatedInstructions = buildAgentInstructions(
+    name,
+    instructions,
+    availableTools,
+    timeZone,
+    connectedToolSlugs,
+  );
   const agent = createAgent(name, formmatedInstructions, tools);
 
   const conversation = messages
@@ -76,7 +83,8 @@ export const buildAgentInstructions = (
     name: string;
     description: string;
   }>,
-  timezone: string
+  timezone: string,
+  connectedToolSlugs: string[] = [],
 ) => {
   const currentDate = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -94,13 +102,18 @@ Available tools catalog:
 ${availableTools
   .map((tool) => `- ${tool.slug}: ${tool.name} - ${tool.description}`)
   .join("\n")}
+Connected tools ready for this agent:
+${connectedToolSlugs.length > 0 ? connectedToolSlugs.map((slug) => `- ${slug}`).join("\n") : "- None"}
 
 Behavior Rules:
 Return type="message" for a normal reply. Set questions and suggestedTools to empty arrays and routine to null.
-Return type="tool_connection" whenever the user explicitly asks to connect or link an app, or needs an unavailable external app for an immediate task. Briefly explain the connection in message, put each matching app from the available tools catalog and its reason in suggestedTools, and set questions to an empty array and routine to null.
+When presenting multiple records such as emails, render each record as a numbered section with a short bold title, then list its key fields on separate bullet lines (From, Date, To, Subject, Preview). Use markdown links for real URLs and email addresses when available. If a real message URL is available, add a separate [View Email](URL) link after its fields. Keep summaries easy to scan and do not invent missing fields or links.
+Return type="tool_connection" whenever the user explicitly asks to connect or link an app that is not already connected, or needs an unavailable external app for an immediate task. Briefly explain the connection in message, put each matching app from the available tools catalog and its reason in suggestedTools, and set questions to an empty array and routine to null.
+If a requested app appears in Connected tools ready for this agent, it is already connected: use its available tools for the task and do not ask the user to connect or reconnect it. If the user explicitly asks to connect an app that is already connected, tell them it is connected.
 Return type="clarification" only when a detail needed to create the routine cannot reasonably be inferred. Ask one concise question for the missing detail(s), set suggestedTools to an empty array, and set routine to null.
 Return type="routine" whenever the user asks to schedule, automate, or repeat a task. Do not answer these requests with type="message".
 For routine responses, fill in every routine field: use the user's wording to create a clear name, goal, and actionable instructions; use the current date above for startDate unless the user specifies another date; use the user's timezone; and put the requested time and frequency in schedule. For a daily schedule, set frequency to "daily" and weekDays to [].
+For a weekly schedule, set one or more weekDays using MO, TU, WE, TH, FR, SA, SU. Ask which day(s) if they are not stated or reasonably inferable; never create a weekly routine with no selected days.
 Treat routines as ongoing until the user says otherwise; do not ask for an end date. Do not ask for a start date or timezone: use the current date above and the user's timezone. Ask for a time or frequency only when the user did not provide enough information to infer it. If the exact text of a requested message is missing, ask for that text. Do not ask which channel to use when the user has not specified one; describe it as the configured or designated channel in the routine instructions.
 When the user answers a clarification, use the full conversation history to create the routine. If the user asks to send a message through an app, include that app as a routine tool when it appears in the available tools catalog, and explain why in the tool's reason.
 Keep the top-level message as a short summary of the routine, such as "This routine will send a Good Morning message every day at 8 AM on Slack."

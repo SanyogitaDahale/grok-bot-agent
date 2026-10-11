@@ -1,6 +1,6 @@
 "use client";
 import {ArrowUp, Copy, Loader, MoreHorizontal, RefreshCw, Sparkles,} from "lucide-react";
-import { useContext, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { AGENT_AVATAR_URL } from "./agent-data";
 import type { MessageType } from "@/type/Message";
@@ -11,6 +11,7 @@ import { AgentConfigContext } from "@/context/AgentConfigContext";
 import type { AgentConfigType } from "@/type/agent";
 import type { AgentResponse } from "@/lib/openai/agent-response-schema";
 import type { ToolSuggestionCardData } from "@/type/Message";
+import { EDIT_ROUTINE_EVENT, type SavedRoutine } from "./routine-events";
 
 function AgentMessage({
   children,
@@ -111,10 +112,12 @@ function Conversation({
   messages,
   agentConfig,
   loading,
+  onRoutineSaved,
 }: {
   messages: MessageType[];
   agentConfig: AgentConfigType | null;
   loading: boolean;
+  onRoutineSaved: (saved: { routineId?: string; routineName: string; updated: boolean }) => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-7 overflow-y-auto px-8 py-10">
@@ -127,7 +130,7 @@ function Conversation({
               agentName={agentConfig?.name || "Orbit Assistant"}
               copyText={msg.response?.message || msg.content}
             >
-              <AgentResponseView message={msg} />
+              <AgentResponseView message={msg} onRoutineSaved={onRoutineSaved} />
             </AgentMessage>
           ) : (
             <div className="flex justify-end">
@@ -166,14 +169,24 @@ function MessageComposer({
   setUserInput,
   handleMessageSend,
   loading,
+  editingRoutine,
+  onCancelEdit,
 }: {
   userInput: string;
   setUserInput: (value: string) => void;
   handleMessageSend: () => void;
   loading: boolean;
+  editingRoutine: SavedRoutine | null;
+  onCancelEdit: () => void;
 }) {
   return (
     <div className="mx-auto w-full max-w-3xl px-8 pb-6">
+      {editingRoutine && (
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-950">
+          <span><strong>Editing routine:</strong> {editingRoutine.name}. Your next message will update this routine.</span>
+          <button type="button" onClick={onCancelEdit} className="shrink-0 font-semibold text-blue-700 hover:text-blue-950">Cancel</button>
+        </div>
+      )}
       <div className="rounded-2xl border border-blue-100 bg-white/95 p-3 shadow-[0_8px_28px_rgba(15,39,120,0.12)] transition focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
         <textarea
           aria-label="Message your agent"
@@ -223,6 +236,7 @@ export default function ChatPanel() {
   const [userInput, setUserInput] = useState("");
   const { agentId } = useParams<{ agentId: string }>();
   const [loading, setLoading] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState<SavedRoutine | null>(null);
   const agentConfig: AgentConfigType | null =
     useContext(AgentConfigContext)?.agentConfig ?? null;
   const [messages, setMessages] = useState<MessageType[]>([
@@ -233,6 +247,55 @@ export default function ChatPanel() {
       time: "Just now",
     },
   ]);
+
+  useEffect(() => {
+    const handleEditRoutine = (event: Event) => {
+      const routine = (event as CustomEvent<SavedRoutine>).detail;
+      if (!routine?.id) return;
+
+      setEditingRoutine(routine);
+      const days = routine.schedule.weekDays.join(", ") || "not specified";
+      const tools = routine.tools.map((tool) => tool.slug).join(", ") || "none";
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: [
+            `Editing existing routine: **${routine.name}**`,
+            "",
+            `- Goal: ${routine.goal}`,
+            `- Task instructions: ${routine.instructions}`,
+            `- Schedule: ${routine.schedule.startDate} at ${routine.schedule.time}, ${routine.schedule.frequency}; days ${days}; timezone ${routine.schedule.timezone}`,
+            `- Tools: ${tools}`,
+            "",
+            "What would you like to change?",
+          ].join("\n"),
+          time: new Date().toLocaleTimeString(),
+        },
+      ]);
+    };
+
+    window.addEventListener(EDIT_ROUTINE_EVENT, handleEditRoutine);
+    return () => window.removeEventListener(EDIT_ROUTINE_EVENT, handleEditRoutine);
+  }, []);
+
+  const handleRoutineSaved = useCallback((saved: { routineId?: string; routineName: string; updated: boolean }) => {
+    if (saved.routineId) {
+      setEditingRoutine((current) => current?.id === saved.routineId ? null : current);
+    }
+    setMessages((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        role: "agent",
+        content: saved.updated
+          ? `**Routine Updated**: ${saved.routineName} is saved and listed in the Schedule tab.`
+          : `**Routine Created**: ${saved.routineName} is saved and listed in the Schedule tab.`,
+        time: new Date().toLocaleTimeString(),
+      },
+    ]);
+  }, []);
 
 
 const handleMessageSend = async () => {
@@ -261,6 +324,7 @@ const handleMessageSend = async () => {
       "/api/agent/chat",
       {
         agentId,
+        routineEditId: editingRoutine?.id ?? null,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         messages: updatedMsgs.map(({ role, content, response }) => ({
           role,
@@ -283,6 +347,7 @@ const handleMessageSend = async () => {
       content: response.message,
       response,
       toolCards: data.toolCards ?? [],
+      routineId: response.type === "routine" ? editingRoutine?.id : undefined,
       time: new Date().toLocaleTimeString(),
     };
 
@@ -312,6 +377,7 @@ const handleMessageSend = async () => {
           messages={messages}
           agentConfig={agentConfig}
           loading={loading}
+          onRoutineSaved={handleRoutineSaved}
         />
 
         <MessageComposer
@@ -319,6 +385,8 @@ const handleMessageSend = async () => {
           setUserInput={setUserInput}
           handleMessageSend={handleMessageSend}
           loading={loading}
+          editingRoutine={editingRoutine}
+          onCancelEdit={() => setEditingRoutine(null)}
         />
       </div>
     </section>

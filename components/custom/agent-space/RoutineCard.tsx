@@ -7,6 +7,7 @@ import { CalendarDays, Check, Clock3, Loader, Plus, Repeat2 } from "lucide-react
 import type { RoutineDraft } from "@/lib/openai/agent-response-schema";
 import type { ToolSuggestionCardData } from "@/type/Message";
 import { ToolSuggestionCard } from "./ToolSuggestionCard";
+import { notifyRoutineSaved } from "./routine-events";
 
 const weekdayLabels: Record<string, string> = {
   MO: "Mon",
@@ -21,15 +22,28 @@ const weekdayLabels: Record<string, string> = {
 export function RoutineCard({
   routine,
   toolCards = [],
+  routineId,
+  onRoutineSaved,
 }: {
   routine: RoutineDraft;
   toolCards?: ToolSuggestionCardData[];
+  routineId?: string;
+  onRoutineSaved?: (saved: { routineId?: string; routineName: string; updated: boolean }) => void;
 }) {
   const { agentId } = useParams<{ agentId: string }>();
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState(false);
   const [error, setError] = useState("");
   const schedule = routine.schedule;
+  const hasCompleteDetails = Boolean(
+    routine.name.trim() &&
+    routine.goal.trim() &&
+    routine.instructions.trim() &&
+    /^\d{4}-\d{2}-\d{2}$/.test(schedule.startDate) &&
+    /^\d{2}:\d{2}$/.test(schedule.time) &&
+    schedule.timezone.trim() &&
+    (schedule.frequency !== "weekly" || schedule.weekDays.length > 0)
+  );
   const dayLabels = schedule.weekDays.map((day) => weekdayLabels[day]);
   const scheduledDays =
     schedule.frequency === "daily"
@@ -65,10 +79,16 @@ export function RoutineCard({
     setError("");
 
     try {
-      await axios.post("/api/agent/routines", { agentId, routine });
+      if (routineId) {
+        await axios.patch(`/api/agent/routines/${routineId}`, { agentId, routine });
+      } else {
+        await axios.post("/api/agent/routines", { agentId, routine });
+      }
       setCreated(true);
+      notifyRoutineSaved();
+      onRoutineSaved?.({ routineId, routineName: routine.name, updated: Boolean(routineId) });
     } catch {
-      setError("Could not create this routine. Please try again.");
+      setError(`Could not ${routineId ? "update" : "create"} this routine. Please try again.`);
     } finally {
       setSaving(false);
     }
@@ -83,7 +103,7 @@ export function RoutineCard({
           </span>
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-              Suggested routine
+              {routineId ? "Routine update" : "Suggested routine"}
             </p>
             <h3 className="mt-1 text-base font-semibold text-slate-950">
               {routine.name}
@@ -168,13 +188,17 @@ export function RoutineCard({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
           <p className="text-sm text-slate-500">
             {created
-              ? "Routine created with its suggested tools."
-              : `${suggestions.length} tool${suggestions.length === 1 ? "" : "s"} will be attached.`}
+              ? routineId
+                ? "Routine updated successfully."
+                : "Routine created with its suggested tools."
+              : !hasCompleteDetails
+                ? "Waiting for complete routine details before saving."
+                : `${suggestions.length} tool${suggestions.length === 1 ? "" : "s"} will be attached.`}
           </p>
           <button
             type="button"
             onClick={createRoutine}
-            disabled={saving || created || !agentId}
+            disabled={saving || created || !agentId || !hasCompleteDetails}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-800 px-3.5 text-sm font-medium text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? (
@@ -184,7 +208,11 @@ export function RoutineCard({
             ) : (
               <Plus className="size-4" aria-hidden="true" />
             )}
-            {saving ? "Creating..." : created ? "Created" : "Create routine"}
+            {saving
+              ? routineId ? "Updating..." : "Creating..."
+              : created
+                ? routineId ? "Updated" : "Created"
+                : routineId ? "Update routine" : "Create routine"}
           </button>
         </div>
         {error && (

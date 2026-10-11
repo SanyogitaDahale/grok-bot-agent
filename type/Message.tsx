@@ -7,6 +7,7 @@ export type MessageType = {
   time: string;
   response?: AgentResponse;
   toolCards?: ToolSuggestionCardData[];
+  routineId?: string;
 };
 
 export type ToolSuggestionCardData = {

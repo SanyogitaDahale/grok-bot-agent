@@ -67,7 +67,7 @@ function AppSidebar() {
             <Link href="/workspace/create-agent">
                 <button
                     type="button"
-                    className="mb-8 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                    className="mb-8 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-gradient-to-r from-blue-700 to-blue-900 px-4 text-sm font-medium text-white shadow-sm shadow-blue-900/15 transition hover:from-blue-800 hover:to-blue-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 >
                     <Plus className="size-4" aria-hidden="true" />
                     Create New Agent
