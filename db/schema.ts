@@ -67,6 +67,25 @@ export const RoutineExecutions = pgTable("routine_executions", {
   statusScheduledIndex: index("routine_executions_status_scheduled_idx").on(table.status, table.scheduledFor),
 }));
 
+export const AgentChatHistory = pgTable("agent_chat_history", {
+  id: serial("id").primaryKey(),
+  agentId: varchar("agent_id").notNull().references(() => AgentConfig.agentid, { onDelete: "cascade" }),
+  userEmail: text("user_email").notNull().references(() => users.email, { onDelete: "cascade" }),
+  messages: jsonb("messages").$type<Array<{
+    id: string;
+    role: "user" | "agent";
+    content: string;
+    time: string;
+    [key: string]: unknown;
+  }>>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => ({
+  agentUnique: uniqueIndex("agent_chat_history_agent_id_unique").on(table.agentId),
+  expiryIndex: index("agent_chat_history_expiry_idx").on(table.expiresAt),
+}));
+
 
 
 

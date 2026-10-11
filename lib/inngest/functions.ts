@@ -1,4 +1,9 @@
-import { AgentConfig, RoutineExecutions, Routines, db } from "@/db";
+import { AgentChatHistory, AgentConfig, RoutineExecutions, Routines, db } from "@/db";
+import {
+  appendAgentChatMessages,
+  filterUnexpiredMessages,
+  getChatHistoryExpiry,
+} from "@/lib/agent-chat-history";
 import { getComposio } from "@/lib/composio/composio";
 import { createAgent, buildAgentInstructions } from "@/lib/openai/openai-agent";
 import { agentResponseSchema } from "@/lib/openai/agent-response-schema";
@@ -24,6 +29,49 @@ type RoutineRunEvent = {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function appendRoutineExecutionToChat({
+  executionId,
+  status,
+  summary,
+}: {
+  executionId: string;
+  status: "completed" | "failed";
+  summary: string;
+}) {
+  const [execution] = await db
+    .select({
+      id: RoutineExecutions.id,
+      routineId: RoutineExecutions.routineId,
+      agentId: RoutineExecutions.agentId,
+      userEmail: RoutineExecutions.userEmail,
+      completedAt: RoutineExecutions.completedAt,
+      routineName: Routines.name,
+    })
+    .from(RoutineExecutions)
+    .innerJoin(Routines, eq(RoutineExecutions.routineId, Routines.id))
+    .where(eq(RoutineExecutions.id, executionId))
+    .limit(1);
+
+  if (!execution) return;
+
+  await appendAgentChatMessages({
+    agentId: execution.agentId,
+    userEmail: execution.userEmail,
+    messages: [{
+      id: `routine-execution:${execution.id}`,
+      role: "agent",
+      content: `**Routine ${status}:** ${execution.routineName}\n\n${summary}`,
+      time: (execution.completedAt ?? new Date()).toISOString(),
+      routineExecution: {
+        routineId: execution.routineId,
+        routineName: execution.routineName,
+        executionId: execution.id,
+        status,
+      },
+    }],
+  });
 }
 
 function getRunEventData(event: unknown): RoutineRunEvent | null {
@@ -224,6 +272,48 @@ export const scheduleRoutineExecutions = inngest.createFunction(
   },
 );
 
+export const pruneExpiredAgentChatHistory = inngest.createFunction(
+  {
+    id: "prune-expired-agent-chat-history",
+    name: "Prune Expired Agent Chat History",
+    retries: 2,
+  },
+  { cron: "17 * * * *" },
+  async () => {
+    const now = new Date();
+    const histories = await db.select({
+      id: AgentChatHistory.id,
+      messages: AgentChatHistory.messages,
+      updatedAt: AgentChatHistory.updatedAt,
+    }).from(AgentChatHistory);
+    let deletedCount = 0;
+    let prunedMessageCount = 0;
+
+    for (const history of histories) {
+      const messages = filterUnexpiredMessages(history.messages, now);
+      prunedMessageCount += history.messages.length - messages.length;
+      if (messages.length === 0) {
+        await db.delete(AgentChatHistory).where(and(
+          eq(AgentChatHistory.id, history.id),
+          eq(AgentChatHistory.updatedAt, history.updatedAt),
+        ));
+        deletedCount += 1;
+      } else if (messages.length !== history.messages.length) {
+        await db.update(AgentChatHistory).set({
+          messages,
+          updatedAt: now,
+          expiresAt: getChatHistoryExpiry(messages),
+        }).where(and(
+          eq(AgentChatHistory.id, history.id),
+          eq(AgentChatHistory.updatedAt, history.updatedAt),
+        ));
+      }
+    }
+
+    return { prunedAt: now.toISOString(), deletedCount, prunedMessageCount };
+  },
+);
+
 export const executeScheduledRoutine = inngest.createFunction(
   {
     id: "execute-scheduled-routine",
@@ -234,7 +324,7 @@ export const executeScheduledRoutine = inngest.createFunction(
       if (!runEvent) return { status: "failure-not-recorded", reason: "missing or invalid run event" };
 
       await step.run("mark-routine-execution-failed", async () => {
-        await db
+        const [failedExecution] = await db
           .update(RoutineExecutions)
           .set({
             status: "failed",
@@ -245,7 +335,16 @@ export const executeScheduledRoutine = inngest.createFunction(
           .where(and(
             eq(RoutineExecutions.id, runEvent.executionId),
             sql`${RoutineExecutions.status} <> 'completed'`,
-          ));
+          ))
+          .returning({ id: RoutineExecutions.id });
+        if (!failedExecution) return { status: "already-completed" };
+
+        await appendRoutineExecutionToChat({
+          executionId: runEvent.executionId,
+          status: "failed",
+          summary: errorMessage(error).slice(0, 8000),
+        });
+        return { status: "failed" };
       });
       return { executionId: runEvent.executionId, status: "failed" };
     },
@@ -451,7 +550,7 @@ export const executeScheduledRoutine = inngest.createFunction(
         `Task instructions: ${claim.routine.instructions}`,
         `This occurrence is scheduled for ${claim.scheduledFor} (${schedule.timezone}); the configured local time is ${schedule.time}.`,
         `Required tools: ${availableTools.map((tool) => tool.slug).join(", ") || "none"}.`,
-        "Follow the task instructions in order. Use only the required connected tools. Wait for each tool result before taking the next action, and do not claim an action succeeded unless a tool result confirms it. Do not create or modify a routine. Return a concise report of what you completed or what prevented completion.",
+        "Follow the task instructions in order. Use only the required connected tools. Wait for each tool result before taking the next action, and do not claim an action succeeded unless a tool result confirms it. Honor any requested external delivery destination from the task instructions. Do not create or modify a routine. Return a concise report of what you completed or what prevented completion; the report will also be saved to this agent's chat history so the user can review it later.",
       ].join("\n\n");
       const instructions = [
         buildAgentInstructions(
@@ -489,6 +588,14 @@ export const executeScheduledRoutine = inngest.createFunction(
           eq(RoutineExecutions.id, claim.executionId),
           sql`${RoutineExecutions.status} = 'running'`,
         ));
+    });
+
+    await step.run("append-routine-result-to-agent-chat", async () => {
+      await appendRoutineExecutionToChat({
+        executionId: claim.executionId,
+        status: "completed",
+        summary: result.message,
+      });
     });
 
     return { executionId: claim.executionId, status: "completed", result };

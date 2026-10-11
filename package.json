@@ -9,6 +9,7 @@
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
+    "db:migrate:chat-history": "node scripts/migrate-chat-history.mjs",
     "db:studio": "drizzle-kit studio",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest"
   },

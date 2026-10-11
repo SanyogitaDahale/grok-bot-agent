@@ -8,6 +8,12 @@ export type MessageType = {
   response?: AgentResponse;
   toolCards?: ToolSuggestionCardData[];
   routineId?: string;
+  routineExecution?: {
+    routineId: string;
+    routineName: string;
+    executionId: string;
+    status: string;
+  };
 };
 
 export type ToolSuggestionCardData = {

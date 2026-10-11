@@ -1,7 +1,7 @@
 
 import { db } from "@/db";
-import { AgentConfig, Routines, Tools } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { AgentChatHistory, AgentConfig, Routines, Tools } from "@/db/schema";
+import { and, eq, gt, lt } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "../../auth/[...nextauth]/route";
@@ -19,6 +19,63 @@ import type { AgentResponse } from "@/lib/openai/agent-response-schema";
 import { routineSchema } from "@/lib/openai/agent-response-schema";
 import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
 import { runRoutineImmediately, RoutineRunError } from "@/lib/inngest/run-routine";
+import {
+  appendAgentChatMessages,
+  filterUnexpiredMessages,
+  getChatHistoryExpiry,
+} from "@/lib/agent-chat-history";
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email;
+    if (!userEmail) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const agentId = req.nextUrl.searchParams.get("agentId");
+    if (!agentId) return NextResponse.json({ error: "An agent ID is required" }, { status: 400 });
+
+    const [agent] = await db.select({ agentid: AgentConfig.agentid }).from(AgentConfig).where(and(
+      eq(AgentConfig.agentid, agentId),
+      eq(AgentConfig.userEmail, userEmail),
+    )).limit(1);
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+
+    const now = new Date();
+    await db.delete(AgentChatHistory).where(lt(AgentChatHistory.expiresAt, now));
+    const [history] = await db.select().from(AgentChatHistory).where(and(
+      eq(AgentChatHistory.agentId, agentId),
+      eq(AgentChatHistory.userEmail, userEmail),
+      gt(AgentChatHistory.expiresAt, now),
+    )).limit(1);
+
+    if (!history) return NextResponse.json({ messages: [] });
+
+    const messages = filterUnexpiredMessages(history.messages, now);
+    if (messages.length === 0) {
+      await db.delete(AgentChatHistory).where(and(
+        eq(AgentChatHistory.id, history.id),
+        eq(AgentChatHistory.updatedAt, history.updatedAt),
+      ));
+    } else if (messages.length !== history.messages.length) {
+      await db.update(AgentChatHistory).set({
+        messages,
+        updatedAt: now,
+        expiresAt: getChatHistoryExpiry(messages),
+      }).where(and(
+        eq(AgentChatHistory.id, history.id),
+        eq(AgentChatHistory.updatedAt, history.updatedAt),
+      ));
+    }
+
+    const afterId = req.nextUrl.searchParams.get("afterId");
+    const afterIndex = afterId ? messages.findIndex((message) => message.id === afterId) : -1;
+    const visibleMessages = afterIndex >= 0 ? messages.slice(afterIndex + 1) : messages;
+    return NextResponse.json({ messages: visibleMessages });
+  } catch (error) {
+    console.error("Failed to load agent chat history:", error);
+    return NextResponse.json({ error: "Failed to load chat history" }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -72,6 +129,46 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       );
     }
+
+    const latestUserMessage = [...messages]
+      .reverse()
+      .find((msg: { role: string }) => msg.role === "user");
+    const chatNow = new Date();
+    await db.delete(AgentChatHistory).where(lt(AgentChatHistory.expiresAt, chatNow));
+    const incomingId = typeof latestUserMessage?.id === "string" ? latestUserMessage.id : crypto.randomUUID();
+    if (latestUserMessage) {
+      await appendAgentChatMessages({
+        agentId,
+        userEmail: session.user.email,
+        messages: [{
+          id: incomingId,
+          role: "user",
+          content: latestUserMessage.content,
+          time: chatNow.toISOString(),
+        }],
+      });
+    }
+    const saveAssistantMessage = async (
+      response: AgentResponse,
+      toolCards: unknown[] = [],
+      details: Record<string, unknown> = {},
+    ) => {
+      const messageId = crypto.randomUUID();
+      await appendAgentChatMessages({
+        agentId,
+        userEmail: session.user.email!,
+        messages: [{
+          id: messageId,
+          role: "agent",
+          content: response.message,
+          time: new Date().toISOString(),
+          response,
+          toolCards,
+          ...details,
+        }],
+      });
+      return messageId;
+    };
 
     let routineEditInstructions = "";
     if (typeof routineEditId === "string" && routineEditId) {
@@ -158,9 +255,6 @@ The user is changing this routine, not creating a second one. Preserve all field
     }
     const connectedToolSlugs = Object.keys(connectedAccountsForAgent);
 
-    const latestUserMessage = [...messages]
-      .reverse()
-      .find((msg: { role: string }) => msg.role === "user");
     const previousAgentMessage = [...messages]
       .reverse()
       .find((msg: { role: string; content?: string }) => msg.role !== "user");
@@ -221,10 +315,9 @@ The user is changing this routine, not creating a second one. Preserve all field
         const message = savedRoutines.length === 0
           ? "There are no saved routines for this agent yet. Create a routine first, then I can run it."
           : `Which routine should I run? ${savedRoutines.map((routine, index) => `${index + 1}. ${routine.name}`).join(" ")}`;
-        return NextResponse.json({
-          response: { type: "message", message, questions: [], suggestedTools: [], routine: null },
-          toolCards: [],
-        });
+        const response: AgentResponse = { type: "message", message, questions: [], suggestedTools: [], routine: null };
+        const historyMessageId = await saveAssistantMessage(response);
+        return NextResponse.json({ response, toolCards: [], historyMessageId });
       }
 
       if (selectedRoutine) {
@@ -234,33 +327,36 @@ The user is changing this routine, not creating a second one. Preserve all field
             agentId,
             userEmail: session.user.email,
           });
-          return NextResponse.json({
-            response: {
+          const response: AgentResponse = {
               type: "message",
               message: `I started **${selectedRoutine.name}**. I’ll let you know when it finishes.`,
               questions: [],
               suggestedTools: [],
               routine: null,
-            },
+            };
+          const routineExecution = {
+            routineId: execution.routineId,
+            routineName: execution.routineName,
+            executionId: execution.executionId,
+          };
+          const historyMessageId = await saveAssistantMessage(response, [], { routineExecution });
+          return NextResponse.json({
+            response,
             toolCards: [],
-            routineExecution: {
-              routineId: execution.routineId,
-              routineName: execution.routineName,
-              executionId: execution.executionId,
-            },
+            routineExecution,
+            historyMessageId,
           });
         } catch (error) {
           if (!(error instanceof RoutineRunError)) throw error;
-          return NextResponse.json({
-            response: {
+          const response: AgentResponse = {
               type: "message",
               message: error.message,
               questions: [],
               suggestedTools: [],
               routine: null,
-            },
-            toolCards: [],
-          });
+            };
+          const historyMessageId = await saveAssistantMessage(response);
+          return NextResponse.json({ response, toolCards: [], historyMessageId });
         }
       }
     }
@@ -357,7 +453,8 @@ The user is changing this routine, not creating a second one. Preserve all field
         isEnabled: tool.isActive ?? true,
       }));
 
-    return NextResponse.json({ response, toolCards });
+    const historyMessageId = await saveAssistantMessage(response, toolCards);
+    return NextResponse.json({ response, toolCards, historyMessageId });
 
   } catch (error) {
     if (error instanceof ComposioConfigurationError) {

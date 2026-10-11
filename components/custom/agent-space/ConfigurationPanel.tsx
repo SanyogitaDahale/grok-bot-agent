@@ -1,9 +1,10 @@
-import { CalendarClock, Check, Layers3, Settings2, SlidersHorizontal, Sparkles, } from 'lucide-react';
+import { CalendarClock, Check, History, Layers3, Settings2, SlidersHorizontal, X, } from 'lucide-react';
 import AgentAvatar from './AgentAvatar';
 import AgentSettingsTab from './AgentSettingsTab';
 import ScheduleTab from './ScheduleTab';
 import SettingsTab from './SettingsTab';
 import ToolsTab from './ToolsTab';
+import ExecutionHistoryTab from './ExecutionHistoryTab';
 import type { AgentConfigTab } from './agent-data';
 import { useContext } from 'react';
 import { AgentConfigContext } from '@/context/AgentConfigContext';
@@ -13,6 +14,8 @@ import axios from 'axios';
 type Props = {
   activeTab: AgentConfigTab;
   onTabChange: (tab: AgentConfigTab) => void;
+  isOpen: boolean;
+  onClose: () => void;
 };
 
 const tabs: {
@@ -28,11 +31,14 @@ const tabs: {
       label: 'Agent settings',
       icon: SlidersHorizontal,
     },
+    { id: 'execution-history', label: 'Routine Execution History', icon: History },
   ];
 
 export default function ConfigurationPanel({
   activeTab,
   onTabChange,
+  isOpen,
+  onClose,
 }: Props) {
 
   const { agentConfig, setAgentConfig } = useContext(AgentConfigContext)
@@ -64,21 +70,31 @@ export default function ConfigurationPanel({
 
 
   return (
-    <aside className="flex w-[420px] shrink-0 flex-col border-l border-blue-200 bg-gradient-to-b from-blue-50/80 via-slate-50 to-slate-100/80 xl:w-[440px]">
+    <aside className={`fixed inset-y-0 right-0 z-50 flex w-[min(440px,calc(100vw-72px))] flex-col border-l border-blue-200 bg-gradient-to-b from-blue-50/80 via-slate-50 to-slate-100/80 shadow-2xl transition-transform duration-200 xl:static xl:z-auto xl:h-auto xl:w-[420px] xl:shrink-0 xl:translate-x-0 xl:shadow-none 2xl:w-[440px] ${isOpen ? 'translate-x-0' : 'translate-x-full xl:translate-x-0'}`}>
 
-      <div className="flex h-[76px] shrink-0 items-center justify-between border-b border-blue-200 bg-gradient-to-r from-white via-blue-50 to-slate-100 px-6">
+      <div className="flex h-[76px] shrink-0 items-center justify-between gap-2 border-b border-blue-200 bg-gradient-to-r from-white via-blue-50 to-slate-100 px-4 sm:px-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-blue-950">
           Agent Configuration
         </h2>
 
-        <button
-          type="button"
-          onClick={SaveAgentConfig}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-800 to-blue-950 px-3 text-sm font-medium text-white shadow-sm shadow-blue-200 transition hover:from-blue-900 hover:to-slate-950"
-        >
-          <Check className="size-3.5" />
-          Save
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={SaveAgentConfig}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-800 to-blue-950 px-3 text-sm font-medium text-white shadow-sm shadow-blue-200 transition hover:from-blue-900 hover:to-slate-950"
+          >
+            <Check className="size-3.5" />
+            Save
+          </button>
+          <button
+            type="button"
+            aria-label="Close agent configuration"
+            onClick={onClose}
+            className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 hover:bg-blue-100 hover:text-blue-950 xl:hidden"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
 
       </div>
 
@@ -117,6 +133,7 @@ export default function ConfigurationPanel({
           {activeTab === 'tools' && <ToolsTab />}
           {activeTab === 'schedule' && <ScheduleTab />}
           {activeTab === 'agent-settings' && <AgentSettingsTab />}
+          {activeTab === 'execution-history' && <ExecutionHistoryTab />}
         </div>
       </div>
     </aside>

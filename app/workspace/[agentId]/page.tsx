@@ -15,6 +15,7 @@ export default function AgentSpacePage() {
 
   const [activeTab, setActiveTab] =
     useState<AgentConfigTab>('settings');
+  const [configurationOpen, setConfigurationOpen] = useState(false);
 
   const [agentConfig, setAgentConfig] =
     useState<AgentConfigType | null>(null);
@@ -44,11 +45,21 @@ export default function AgentSpacePage() {
     <AgentConfigContext.Provider
       value={{ agentConfig, setAgentConfig }}
     >
-      <div className="flex h-screen min-h-[680px] min-w-0 overflow-hidden bg-white text-slate-900">
-        <ChatPanel />
+      <div className="relative flex h-dvh min-h-[520px] min-w-0 overflow-hidden bg-white text-slate-900">
+        <ChatPanel onOpenConfiguration={() => setConfigurationOpen(true)} />
+        {configurationOpen && (
+          <button
+            type="button"
+            aria-label="Close agent configuration"
+            onClick={() => setConfigurationOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-950/30 xl:hidden"
+          />
+        )}
         <ConfigurationPanel
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          isOpen={configurationOpen}
+          onClose={() => setConfigurationOpen(false)}
         />
       </div>
     </AgentConfigContext.Provider>

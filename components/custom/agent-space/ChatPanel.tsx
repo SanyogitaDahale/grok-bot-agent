@@ -1,6 +1,6 @@
 "use client";
-import {ArrowUp, Copy, Loader, MoreHorizontal, RefreshCw, Sparkles,} from "lucide-react";
-import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {ArrowUp, Copy, Loader, MoreHorizontal, RefreshCw, Settings2, Sparkles,} from "lucide-react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { AGENT_AVATAR_URL } from "./agent-data";
 import type { MessageType } from "@/type/Message";
@@ -68,9 +68,9 @@ function AgentMessage({
   );
 }
 
-function ChatHeader({ agentConfig }: { agentConfig: AgentConfigType | null }) {
+function ChatHeader({ agentConfig, onOpenConfiguration }: { agentConfig: AgentConfigType | null; onOpenConfiguration: () => void }) {
   return (
-    <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-blue-100 bg-white px-7">
+    <header className="flex h-[76px] shrink-0 items-center justify-between gap-2 border-b border-blue-100 bg-white px-3 sm:px-5 xl:px-7">
       <div className="flex min-w-0 items-center gap-3">
         <img
           src={agentConfig?.agentImage || AGENT_AVATAR_URL}
@@ -89,7 +89,7 @@ function ChatHeader({ agentConfig }: { agentConfig: AgentConfigType | null }) {
       </div>
 
       <div className="flex items-center gap-2.5">
-        <span className="text-sm font-medium text-slate-500">Active</span>
+        <span className="hidden text-sm font-medium text-slate-500 sm:inline">Active</span>
         <span
           aria-label="Agent active"
           className="relative inline-flex h-6 w-11 rounded-full bg-emerald-500 p-[3px]"
@@ -102,6 +102,15 @@ function ChatHeader({ agentConfig }: { agentConfig: AgentConfigType | null }) {
           className="ml-1 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
         >
           <MoreHorizontal className="size-5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Open agent configuration"
+          title="Agent configuration"
+          onClick={onOpenConfiguration}
+          className="inline-flex size-10 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-800 shadow-sm transition hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 xl:hidden"
+        >
+          <Settings2 className="size-5" />
         </button>
       </div>
     </header>
@@ -119,8 +128,13 @@ function Conversation({
   loading: boolean;
   onRoutineSaved: (saved: { routineId?: string; routineName: string; updated: boolean }) => void;
 }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, loading]);
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-7 overflow-y-auto px-8 py-10">
+    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-7 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 xl:px-8 xl:py-10">
       {messages.map((msg) => (
         <div key={msg.id}>
           {msg.role === "agent" ? (
@@ -160,6 +174,7 @@ function Conversation({
           </div>
         </div>
       )}
+      <div ref={bottomRef} />
     </div>
   );
 }
@@ -180,7 +195,7 @@ function MessageComposer({
   onCancelEdit: () => void;
 }) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-8 pb-6">
+    <div className="mx-auto w-full max-w-3xl px-4 pb-4 sm:px-6 sm:pb-6 xl:px-8">
       {editingRoutine && (
         <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-950">
           <span><strong>Editing routine:</strong> {editingRoutine.name}. Your next message will update this routine.</span>
@@ -232,7 +247,7 @@ function MessageComposer({
   );
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ onOpenConfiguration }: { onOpenConfiguration: () => void }) {
   const [userInput, setUserInput] = useState("");
   const { agentId } = useParams<{ agentId: string }>();
   const [loading, setLoading] = useState(false);
@@ -247,6 +262,61 @@ export default function ChatPanel() {
       time: "Just now",
     },
   ]);
+  const [historyReady, setHistoryReady] = useState(false);
+  const historyCursor = useRef<string | null>(null);
+
+  const syncChatHistory = useCallback(async () => {
+    if (!agentId) return;
+    const { data } = await axios.get<{ messages: MessageType[] }>("/api/agent/chat", {
+      params: { agentId, ...(historyCursor.current ? { afterId: historyCursor.current } : {}) },
+    });
+    if (data.messages.length === 0) return;
+
+    const incoming = data.messages.map((message) => ({
+      ...message,
+      time: new Date(message.time).toLocaleTimeString(),
+    }));
+    historyCursor.current = data.messages[data.messages.length - 1].id;
+    setMessages((current) => {
+      const existingIds = new Set(current.map((message) => message.id));
+      const newMessages = incoming.filter((message) => !existingIds.has(message.id));
+      return newMessages.length ? [...current, ...newMessages] : current;
+    });
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!agentId) return;
+    setHistoryReady(false);
+    historyCursor.current = null;
+    let cancelled = false;
+    axios.get<{ messages: MessageType[] }>("/api/agent/chat", { params: { agentId } })
+      .then(({ data }) => {
+        if (!cancelled && data.messages.length > 0) {
+          historyCursor.current = data.messages[data.messages.length - 1].id;
+          setMessages(data.messages.map((message) => ({
+            ...message,
+            time: new Date(message.time).toLocaleTimeString(),
+          })));
+        }
+        else if (!cancelled) setMessages([{
+          id: "Hello! Welcome to Orbit",
+          role: "agent",
+          content: "Hello! I am Agent, how can I help you today?",
+          time: "Just now",
+        }]);
+      })
+      .catch((error) => console.error("Could not load agent chat history:", error))
+      .finally(() => { if (!cancelled) setHistoryReady(true); });
+    return () => { cancelled = true; };
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!agentId || !historyReady) return;
+    const intervalId = window.setInterval(() => {
+      void syncChatHistory().catch((error) => console.error("Could not sync agent chat history:", error));
+    }, 3500);
+    return () => window.clearInterval(intervalId);
+  }, [agentId, historyReady, syncChatHistory]);
 
   useEffect(() => {
     const handleEditRoutine = (event: Event) => {
@@ -308,21 +378,38 @@ export default function ChatPanel() {
           if (["queued", "running"].includes(data.execution.status)) continue;
 
           const succeeded = data.execution.status === "completed";
+          const failed = data.execution.status === "failed";
           const detail = succeeded
             ? data.execution.result?.message ?? `${run.routineName} completed successfully.`
             : data.execution.error ?? `${run.routineName} ${data.execution.status}.`;
-          setMessages((current) => [...current, {
-            id: crypto.randomUUID(),
+          const status = succeeded ? "completed" : failed ? "failed" : "cancelled";
+          const content = `**Routine ${status}:** ${run.routineName}\n\n${detail}`;
+          const messageId = `routine-execution:${run.executionId}`;
+          const completionMessage: MessageType = {
+            id: messageId,
             role: "agent",
-            content: succeeded
-              ? `**Routine finished:** ${run.routineName}\n\n${detail}`
-              : `**Routine failed:** ${run.routineName}\n\n${detail}`,
+            content,
             time: new Date().toLocaleTimeString(),
-          }]);
+            routineExecution: {
+              routineId: run.routineId,
+              routineName: run.routineName,
+              executionId: run.executionId,
+              status,
+            },
+          };
+          setMessages((current) => current.some((message) => message.id === messageId)
+            ? current
+            : [...current, completionMessage]);
+          void axios.post("/api/agent/chat/history", {
+            agentId,
+            id: messageId,
+            content,
+            details: { routineExecution: completionMessage.routineExecution },
+          }).catch((error) => console.error("Could not save routine result in chat history:", error));
           toast.add({
-            title: succeeded ? "Routine finished" : "Routine failed",
+            title: succeeded ? "Routine finished" : failed ? "Routine failed" : "Routine cancelled",
             description: detail,
-            type: succeeded ? "success" : "error",
+            type: succeeded ? "success" : failed ? "error" : "info",
           });
           window.dispatchEvent(new Event(ROUTINE_RUN_EVENT));
           return;
@@ -332,7 +419,7 @@ export default function ChatPanel() {
       }
     };
     void poll();
-  }, []);
+  }, [agentId]);
 
 
 const handleMessageSend = async () => {
@@ -358,13 +445,15 @@ const handleMessageSend = async () => {
       response: AgentResponse;
       toolCards?: ToolSuggestionCardData[];
       routineExecution?: { routineId: string; routineName: string; executionId: string };
+      historyMessageId?: string;
     }>(
       "/api/agent/chat",
       {
         agentId,
         routineEditId: editingRoutine?.id ?? null,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        messages: updatedMsgs.map(({ role, content, response }) => ({
+        messages: updatedMsgs.map(({ id, role, content, response }) => ({
+          id,
           role,
           content:
             response?.type === "clarification"
@@ -380,7 +469,7 @@ const handleMessageSend = async () => {
     const response = data.response;
 
     const agentMsg: MessageType = {
-      id: crypto.randomUUID(),
+      id: data.historyMessageId ?? crypto.randomUUID(),
       role: "agent",
       content: response.message,
       response,
@@ -411,8 +500,8 @@ const handleMessageSend = async () => {
 
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col">
-      <ChatHeader agentConfig={agentConfig} />
+    <section className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+      <ChatHeader agentConfig={agentConfig} onOpenConfiguration={onOpenConfiguration} />
 
       <div className="flex min-h-0 flex-1 flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-50/80 via-slate-50/50 to-white">
         <Conversation

@@ -4,6 +4,7 @@ import { processTaskBackgroundJob } from '@/lib/inngest/background-functions';
 import {
   scheduleRoutineExecutions,
   executeScheduledRoutine,
+  pruneExpiredAgentChatHistory,
 } from '@/lib/inngest/functions';
 
 // Create an API route that serves Inngest functions
@@ -13,5 +14,6 @@ export const { GET, POST, PUT } = serve({
     processTaskBackgroundJob,
     scheduleRoutineExecutions,
     executeScheduledRoutine,
+    pruneExpiredAgentChatHistory,
   ],
 });

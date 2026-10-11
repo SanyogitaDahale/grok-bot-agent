@@ -5,13 +5,14 @@ import {
   FileText,
   Github,
   HardDrive,
+  History,
   Layers3,
   Mail,
   MessageSquareText,
   PanelsTopLeft,
 } from 'lucide-react';
 
-export type AgentConfigTab = 'settings' | 'tools' | 'schedule' | 'agent-settings';
+export type AgentConfigTab = 'settings' | 'tools' | 'schedule' | 'agent-settings' | 'execution-history';
 
 export const AGENT_AVATAR_URL = 'https://api.dicebear.com/10.x/gaze/svg?tags=animation&seed=Orbit-Assistant';
 

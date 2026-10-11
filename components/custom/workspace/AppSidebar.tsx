@@ -46,20 +46,21 @@ function AppSidebar() {
     };
 
     return (
-        <aside className="flex h-screen w-[272px] shrink-0 flex-col border-r border-slate-200 bg-white px-4 py-5 text-slate-900">
+        <aside className="flex h-dvh w-[68px] shrink-0 flex-col border-r border-slate-200 bg-white px-2 py-4 text-slate-900 sm:w-[76px] sm:px-2.5 lg:w-[272px] lg:px-4 lg:py-5">
             <Link
                 href="/workspace"
-                className="mb-3 flex items-center gap-2 rounded-lg px-2 py-1.5"
+                className="mb-3 flex items-center justify-center gap-2 rounded-lg px-0 py-1.5 lg:justify-start lg:px-2"
                 aria-label="Orbit home"
             >
                 <img
                     src="/logo.png"
                     alt="LOGO"
-                    width={45}
-                    height={45}
+                    width={40}
+                    height={40}
+                    className="size-9 lg:size-[45px]"
                 />
 
-                <span className="text-2xl font-semibold tracking-tight">
+                <span className="hidden text-2xl font-semibold tracking-tight lg:inline">
                     Orbit
                 </span>
             </Link>
@@ -67,19 +68,20 @@ function AppSidebar() {
             <Link href="/workspace/create-agent">
                 <button
                     type="button"
-                    className="mb-8 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-gradient-to-r from-blue-700 to-blue-900 px-4 text-sm font-medium text-white shadow-sm shadow-blue-900/15 transition hover:from-blue-800 hover:to-blue-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    aria-label="Create new agent"
+                    className="mb-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-gradient-to-r from-blue-700 to-blue-900 px-1 text-sm font-medium text-white shadow-sm shadow-blue-900/15 transition hover:from-blue-800 hover:to-blue-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:mb-8 lg:px-4"
                 >
                     <Plus className="size-4" aria-hidden="true" />
-                    Create New Agent
+                    <span className="hidden lg:inline">Create New Agent</span>
                 </button>
             </Link>
 
             <nav
-                className="min-h-0 flex-1 overflow-y-auto"
+                className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
                 aria-label="Your agents"
             >
-                <div className="mb-3 flex items-center justify-between px-2">
-                    <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">
+                <div className="mb-3 flex items-center justify-center px-0 lg:justify-between lg:px-2">
+                    <h2 className="hidden text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 lg:block">
                         Your Agents
                     </h2>
 
@@ -93,7 +95,8 @@ function AppSidebar() {
                         <li key={agent.agentid}>
                             <Link
                                 href={`/workspace/${agent.agentid}`}
-                                className={`group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition ${path === `/workspace/${agent.agentid}`
+                                title={agent.name}
+                                className={`group flex items-center justify-center gap-3 rounded-lg px-1 py-2.5 transition lg:justify-start lg:px-2.5 ${path === `/workspace/${agent.agentid}`
                                         ? 'bg-slate-100 font-medium text-slate-950'
                                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                                     }`}
@@ -110,12 +113,12 @@ function AppSidebar() {
                                     </span>
                                 )}
 
-                                <span className="truncate">
+                                <span className="hidden truncate lg:inline">
                                     {agent.name}
                                 </span>
 
                                 <Bot
-                                    className="ml-auto size-4 shrink-0 text-slate-300 opacity-0 transition group-hover:opacity-100"
+                                    className="ml-auto hidden size-4 shrink-0 text-slate-300 opacity-0 transition group-hover:opacity-100 lg:block"
                                     aria-hidden="true"
                                 />
                             </Link>
@@ -127,7 +130,8 @@ function AppSidebar() {
             <div className="mt-5 border-t border-slate-100 pt-4">
                 <Link
                     href="/marketplace"
-                    className={`mb-3 flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition hover:bg-slate-50 ${path === '/marketplace'
+                    title="Marketplace"
+                    className={`mb-3 flex items-center justify-center gap-3 rounded-lg px-1 py-2.5 transition hover:bg-slate-50 lg:justify-start lg:px-2.5 ${path === '/marketplace'
                             ? 'bg-slate-100 font-medium text-slate-950'
                             : 'text-slate-600 hover:text-slate-950'
                         }`}
@@ -137,23 +141,23 @@ function AppSidebar() {
                         aria-hidden="true"
                     />
 
-                    Marketplace
+                    <span className="hidden lg:inline">Marketplace</span>
                 </Link>
 
-                <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+                <div className="flex items-center justify-center gap-3 rounded-lg px-0 py-2 lg:justify-start lg:px-2">
                     {avatar ? (
                         <img
                             src={avatar}
                             alt=""
-                            className="size-9 rounded-full object-cover"
+                            className="size-8 rounded-full object-cover lg:size-9"
                         />
                     ) : (
-                        <span className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+                        <span className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600 lg:size-9">
                             {userName.slice(0, 1).toUpperCase()}
                         </span>
                     )}
 
-                    <div className="min-w-0 flex-1">
+                    <div className="hidden min-w-0 flex-1 lg:block">
                         <p className="truncate text-sm font-medium text-slate-800">
                             {userName}
                         </p>
