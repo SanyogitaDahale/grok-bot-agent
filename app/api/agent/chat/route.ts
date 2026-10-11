@@ -1,7 +1,7 @@
 
 import { db } from "@/db";
 import { AgentConfig, Routines, Tools } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "../../auth/[...nextauth]/route";
@@ -18,6 +18,7 @@ import { AgentConfigType } from "@/type/agent";
 import type { AgentResponse } from "@/lib/openai/agent-response-schema";
 import { routineSchema } from "@/lib/openai/agent-response-schema";
 import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
+import { runRoutineImmediately, RoutineRunError } from "@/lib/inngest/run-routine";
 
 export async function POST(req: NextRequest) {
   try {
@@ -105,14 +106,6 @@ The user is changing this routine, not creating a second one. Preserve all field
 `.trim();
     }
 
-    if (Array.isArray(agentConfig.tools) && agentConfig.tools.length > 0) {
-      const composioSession = await getOrCreateAgentSession(
-        agentConfig as unknown as AgentConfigType,
-        session.user.email
-      );
-      agentComposioTools = await composioSession.tools();
-    }
-
     const chatMessages = messages.map(
       (msg: { role: "user" | "assistant" | "agent"; content: string }) => ({
         role: msg.role === "agent" ? "assistant" : msg.role,
@@ -122,7 +115,13 @@ The user is changing this routine, not creating a second one. Preserve all field
 
     //ALl available tools
     const registeredTools = await db.select().from(Tools).where(eq(Tools.isActive, true));
-    const toolsBySlug = new Map(
+    const toolsBySlug = new Map<string, {
+      slug: string;
+      name: string;
+      description: string;
+      icon?: string;
+      isActive: boolean;
+    }>(
       registeredTools.map((tool) => [tool.slug.toLowerCase(), {
         slug: tool.slug,
         name: tool.name,
@@ -162,6 +161,118 @@ The user is changing this routine, not creating a second one. Preserve all field
     const latestUserMessage = [...messages]
       .reverse()
       .find((msg: { role: string }) => msg.role === "user");
+    const previousAgentMessage = [...messages]
+      .reverse()
+      .find((msg: { role: string; content?: string }) => msg.role !== "user");
+    const latestUserText = typeof latestUserMessage?.content === "string"
+      ? latestUserMessage.content
+      : "";
+    const asksHowToRun = /\bhow\s+(do|can|would|should)\b/i.test(latestUserText);
+    const awaitingRoutineChoice = /which routine should i run/i.test(previousAgentMessage?.content ?? "");
+    const wantsImmediateRun = !asksHowToRun && (
+      /\b(run|execute|start|trigger|perform)\b/i.test(latestUserText) || awaitingRoutineChoice
+    );
+    if (wantsImmediateRun && !routineEditInstructions) {
+      const savedRoutines = await db
+        .select({ id: Routines.id, name: Routines.name, goal: Routines.goal })
+        .from(Routines)
+        .where(and(
+          eq(Routines.agentId, agentId),
+          eq(Routines.userEmail, session.user.email),
+        ))
+        .orderBy(asc(Routines.name));
+
+      const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const words = normalize(latestUserText).split(/\s+/).filter(Boolean);
+      const matches = savedRoutines.map((routine) => {
+        const title = normalize(routine.name);
+        const titleWords = title.split(" ").filter((word) => word.length > 2 && !["daily", "weekly", "routine", "task"].includes(word));
+        const matchingWords = titleWords.filter((word) => words.includes(word)).length;
+        const exactTitle = Boolean(title && normalize(latestUserText).includes(title));
+        const requiredWords = Math.min(2, titleWords.length);
+        return { routine, score: exactTitle ? 100 : matchingWords, matched: exactTitle || (requiredWords > 0 && matchingWords >= requiredWords) };
+      }).filter((match) => match.matched);
+
+      const asksForFutureRun = /\b(tomorrow|later|tonight|next\s+(day|week|month)|at\s+\d|every\s+)\b/i.test(latestUserText);
+      const ordinal = /\b(first|1st|one|1)\b/i.test(latestUserText) ? 0
+        : /\b(second|2nd|two|2)\b/i.test(latestUserText) ? 1
+          : /\b(third|3rd|three|3)\b/i.test(latestUserText) ? 2
+            : -1;
+      const immediateWording = awaitingRoutineChoice || (!asksForFutureRun && (
+        /\b(now|immediately|right away|right now)\b/i.test(latestUserText) || /\broutine\b/i.test(latestUserText)
+      ));
+      const explicitlyNamedRoutine = !asksForFutureRun && matches.some((match) => match.score >= 100);
+      let selectedRoutine = immediateWording || explicitlyNamedRoutine
+        ? matches.length === 1 ? matches[0].routine : null
+        : null;
+      if (!selectedRoutine && matches.length > 1) {
+        const highestScore = Math.max(...matches.map((match) => match.score));
+        const bestMatches = matches.filter((match) => match.score === highestScore);
+        if (bestMatches.length === 1 && highestScore >= 100) selectedRoutine = bestMatches[0].routine;
+      }
+      if (!selectedRoutine && savedRoutines.length === 1 && immediateWording) {
+        selectedRoutine = savedRoutines[0];
+      }
+      if (!selectedRoutine && awaitingRoutineChoice && ordinal >= 0 && ordinal < savedRoutines.length) {
+        selectedRoutine = savedRoutines[ordinal];
+      }
+
+      if (!selectedRoutine && (immediateWording || explicitlyNamedRoutine)) {
+        const message = savedRoutines.length === 0
+          ? "There are no saved routines for this agent yet. Create a routine first, then I can run it."
+          : `Which routine should I run? ${savedRoutines.map((routine, index) => `${index + 1}. ${routine.name}`).join(" ")}`;
+        return NextResponse.json({
+          response: { type: "message", message, questions: [], suggestedTools: [], routine: null },
+          toolCards: [],
+        });
+      }
+
+      if (selectedRoutine) {
+        try {
+          const execution = await runRoutineImmediately({
+            routineId: selectedRoutine.id,
+            agentId,
+            userEmail: session.user.email,
+          });
+          return NextResponse.json({
+            response: {
+              type: "message",
+              message: `I started **${selectedRoutine.name}**. I’ll let you know when it finishes.`,
+              questions: [],
+              suggestedTools: [],
+              routine: null,
+            },
+            toolCards: [],
+            routineExecution: {
+              routineId: execution.routineId,
+              routineName: execution.routineName,
+              executionId: execution.executionId,
+            },
+          });
+        } catch (error) {
+          if (!(error instanceof RoutineRunError)) throw error;
+          return NextResponse.json({
+            response: {
+              type: "message",
+              message: error.message,
+              questions: [],
+              suggestedTools: [],
+              routine: null,
+            },
+            toolCards: [],
+          });
+        }
+      }
+    }
+
+    if (Array.isArray(agentConfig.tools) && agentConfig.tools.length > 0) {
+      const composioSession = await getOrCreateAgentSession(
+        agentConfig as unknown as AgentConfigType,
+        session.user.email
+      );
+      agentComposioTools = await composioSession.tools();
+    }
+
     const latestText =
       typeof latestUserMessage?.content === "string"
         ? latestUserMessage.content.toLowerCase().replace(/[^a-z0-9]/g, "")

@@ -1,11 +1,13 @@
 import { db } from "@/db";
-import { Routines, Tools } from "@/db/schema";
+import { RoutineExecutions, Routines, Tools } from "@/db/schema";
 import { routineSchema } from "@/lib/openai/agent-response-schema";
 import { and, eq } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
+import { getNextRoutineOccurrence, type RoutineSchedule } from "@/lib/inngest/routine-schedule";
+import { inngest } from "@/lib/inngest/client";
 
 type RouteContext = { params: Promise<{ routineId: string }> };
 
@@ -24,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     }
 
     const [existing] = await db
-      .select({ id: Routines.id })
+      .select({ id: Routines.id, schedule: Routines.schedule, isActive: Routines.isActive })
       .from(Routines)
       .where(and(
         eq(Routines.id, routineId),
@@ -39,9 +41,31 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     if (typeof body.isActive === "boolean" && body.routine === undefined) {
       const [routine] = await db
         .update(Routines)
-        .set({ isActive: body.isActive })
+        .set({
+          isActive: body.isActive,
+          nextRunAt: body.isActive
+            ? getNextRoutineOccurrence(existing.schedule as RoutineSchedule, new Date())
+            : null,
+        })
         .where(and(eq(Routines.id, routineId), eq(Routines.agentId, body.agentId), eq(Routines.userEmail, userEmail)))
         .returning();
+      if (!body.isActive) {
+        await db
+          .update(RoutineExecutions)
+          .set({ status: "cancelled", error: "The routine was deactivated.", completedAt: new Date(), updatedAt: new Date() })
+          .where(and(
+            eq(RoutineExecutions.routineId, routineId),
+            eq(RoutineExecutions.status, "queued"),
+          ));
+      } else {
+        await inngest.send({
+          id: `schedule-routine-${routine.id}-${crypto.randomUUID()}`,
+          name: "agent/routines.schedule",
+          data: { agentId: routine.agentId },
+        }).catch((error) => {
+          console.error("Failed to trigger routine scheduling scan:", error);
+        });
+      }
       return NextResponse.json({ routine });
     }
 
@@ -93,9 +117,30 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
         instructions: parsedRoutine.data.instructions,
         schedule: parsedRoutine.data.schedule,
         tools: attachedTools,
+        nextRunAt: existing.isActive
+          ? getNextRoutineOccurrence(parsedRoutine.data.schedule, new Date())
+          : null,
       })
       .where(and(eq(Routines.id, routineId), eq(Routines.agentId, body.agentId), eq(Routines.userEmail, userEmail)))
       .returning();
+
+    await db
+      .update(RoutineExecutions)
+      .set({ status: "cancelled", error: "The routine schedule was updated.", completedAt: new Date(), updatedAt: new Date() })
+      .where(and(
+        eq(RoutineExecutions.routineId, routineId),
+        eq(RoutineExecutions.status, "queued"),
+      ));
+
+    if (existing.isActive) {
+      await inngest.send({
+        id: `schedule-routine-${routine.id}-${crypto.randomUUID()}`,
+        name: "agent/routines.schedule",
+        data: { agentId: routine.agentId },
+      }).catch((error) => {
+        console.error("Failed to trigger routine scheduling scan:", error);
+      });
+    }
 
     return NextResponse.json({ routine });
   } catch (error) {

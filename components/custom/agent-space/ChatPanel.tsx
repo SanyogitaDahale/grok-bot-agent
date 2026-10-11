@@ -11,7 +11,7 @@ import { AgentConfigContext } from "@/context/AgentConfigContext";
 import type { AgentConfigType } from "@/type/agent";
 import type { AgentResponse } from "@/lib/openai/agent-response-schema";
 import type { ToolSuggestionCardData } from "@/type/Message";
-import { EDIT_ROUTINE_EVENT, type SavedRoutine } from "./routine-events";
+import { EDIT_ROUTINE_EVENT, ROUTINE_RUN_EVENT, type SavedRoutine } from "./routine-events";
 
 function AgentMessage({
   children,
@@ -297,6 +297,43 @@ export default function ChatPanel() {
     ]);
   }, []);
 
+  const watchRoutineExecution = useCallback((run: { routineId: string; routineName: string; executionId: string }) => {
+    const poll = async () => {
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        try {
+          const { data } = await axios.get<{
+            execution: { status: string; error: string | null; result: { message?: string } | null };
+          }>(`/api/agent/routines/${run.routineId}/runs/${run.executionId}`);
+          if (["queued", "running"].includes(data.execution.status)) continue;
+
+          const succeeded = data.execution.status === "completed";
+          const detail = succeeded
+            ? data.execution.result?.message ?? `${run.routineName} completed successfully.`
+            : data.execution.error ?? `${run.routineName} ${data.execution.status}.`;
+          setMessages((current) => [...current, {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content: succeeded
+              ? `**Routine finished:** ${run.routineName}\n\n${detail}`
+              : `**Routine failed:** ${run.routineName}\n\n${detail}`,
+            time: new Date().toLocaleTimeString(),
+          }]);
+          toast.add({
+            title: succeeded ? "Routine finished" : "Routine failed",
+            description: detail,
+            type: succeeded ? "success" : "error",
+          });
+          window.dispatchEvent(new Event(ROUTINE_RUN_EVENT));
+          return;
+        } catch {
+          // Keep polling through short network interruptions.
+        }
+      }
+    };
+    void poll();
+  }, []);
+
 
 const handleMessageSend = async () => {
   if (!userInput.trim() || !agentId || loading) {
@@ -320,6 +357,7 @@ const handleMessageSend = async () => {
     const { data } = await axios.post<{
       response: AgentResponse;
       toolCards?: ToolSuggestionCardData[];
+      routineExecution?: { routineId: string; routineName: string; executionId: string };
     }>(
       "/api/agent/chat",
       {
@@ -352,6 +390,10 @@ const handleMessageSend = async () => {
     };
 
     setMessages((prev) => [...prev, agentMsg]);
+    if (data.routineExecution) {
+      window.dispatchEvent(new Event(ROUTINE_RUN_EVENT));
+      watchRoutineExecution(data.routineExecution);
+    }
   } catch (error) {
     console.error("Error sending message:", error);
 

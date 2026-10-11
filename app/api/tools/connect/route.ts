@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userEmail = session.user.email;
 
     const body = await req.json();
     const { agentId, toolkitSlug } = body;
@@ -92,11 +93,11 @@ export async function POST(req: NextRequest) {
       }
 
       const connectedAccounts = await getActiveConnectedAccounts(
-        session.user.email,
+        userEmail,
         configuredTools,
         composio,
       );
-      return composio.sessions.create(session.user.email, {
+      return composio.sessions.create(userEmail, {
         toolkits: toolSlugs,
         ...(Object.keys(connectedAccounts).length > 0 ? { connectedAccounts } : {}),
       });

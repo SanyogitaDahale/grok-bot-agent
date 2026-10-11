@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import axios from "axios";
-import { CalendarClock, Clock3, Ellipsis, Loader, PauseCircle, Pencil, PlayCircle, Trash2 } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock3, Ellipsis, Loader, PauseCircle, Pencil, Play, PlayCircle, Trash2, XCircle } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
   AlertDialog,
@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { EDIT_ROUTINE_EVENT, ROUTINE_SAVED_EVENT, type SavedRoutine } from "./routine-events";
+import { EDIT_ROUTINE_EVENT, ROUTINE_RUN_EVENT, ROUTINE_SAVED_EVENT, type SavedRoutine } from "./routine-events";
 
 const dayNames: Record<string, string> = {
   MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat", SU: "Sun",
@@ -36,7 +36,10 @@ export default function ScheduleTab() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [routineToDelete, setRoutineToDelete] = useState<SavedRoutine | null>(null);
   const [routineToToggle, setRoutineToToggle] = useState<{ routine: SavedRoutine; isActive: boolean } | null>(null);
+  const [routineToRun, setRoutineToRun] = useState<SavedRoutine | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [startingRunId, setStartingRunId] = useState<string | null>(null);
+  const watchedRunIds = useRef(new Set<string>());
 
   const loadRoutines = useCallback(async () => {
     if (!agentId) return;
@@ -60,12 +63,95 @@ export default function ScheduleTab() {
 
   useEffect(() => {
     window.addEventListener(ROUTINE_SAVED_EVENT, loadRoutines);
-    return () => window.removeEventListener(ROUTINE_SAVED_EVENT, loadRoutines);
+    window.addEventListener(ROUTINE_RUN_EVENT, loadRoutines);
+    return () => {
+      window.removeEventListener(ROUTINE_SAVED_EVENT, loadRoutines);
+      window.removeEventListener(ROUTINE_RUN_EVENT, loadRoutines);
+    };
   }, [loadRoutines]);
+
+  const activeRunKey = routines
+    .filter((routine) => ["queued", "running"].includes(routine.runStatus ?? "") && routine.runExecutionId)
+    .map((routine) => `${routine.id}:${routine.runExecutionId}`)
+    .join("|");
+
+  useEffect(() => {
+    let stopped = false;
+    const activeRuns = routines.filter((routine) =>
+      ["queued", "running"].includes(routine.runStatus ?? "") && routine.runExecutionId,
+    );
+
+    const watchRun = async (routine: SavedRoutine) => {
+      if (!routine.runExecutionId) return;
+      while (!stopped) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (stopped) return;
+        try {
+          const { data } = await axios.get<{ execution: { status: string; error: string | null } }>(
+            `/api/agent/routines/${routine.id}/runs/${routine.runExecutionId}`,
+          );
+          const status = data.execution.status;
+          setRoutines((current) => current.map((item) => item.id === routine.id
+            ? { ...item, runStatus: status }
+            : item));
+
+          if (!["queued", "running"].includes(status)) {
+            if (watchedRunIds.current.delete(routine.runExecutionId)) {
+              const succeeded = status === "completed";
+              toast.add({
+                title: succeeded ? "Routine finished" : "Routine did not finish",
+                description: succeeded
+                  ? `${routine.name} completed successfully.`
+                  : data.execution.error || `${routine.name} ${status}.`,
+                type: succeeded ? "success" : "error",
+              });
+            }
+            return;
+          }
+        } catch {
+          // Keep polling briefly through transient request failures.
+        }
+      }
+    };
+
+    activeRuns.forEach((routine) => void watchRun(routine));
+    return () => { stopped = true; };
+  // `activeRunKey` changes only when a run starts or reaches a terminal state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunKey]);
 
   const editRoutine = (routine: SavedRoutine, button: HTMLButtonElement) => {
     button.closest("details")?.removeAttribute("open");
     window.dispatchEvent(new CustomEvent(EDIT_ROUTINE_EVENT, { detail: routine }));
+  };
+
+  const runRoutine = async () => {
+    if (!agentId || !routineToRun || startingRunId) return;
+    const routine = routineToRun;
+    setStartingRunId(routine.id);
+    try {
+      const { data } = await axios.post<{ execution: { executionId: string; status: string } }>(
+        `/api/agent/routines/${routine.id}/run`,
+        { agentId },
+      );
+      const { executionId, status } = data.execution;
+      watchedRunIds.current.add(executionId);
+      setRoutines((current) => current.map((item) => item.id === routine.id
+        ? { ...item, runExecutionId: executionId, runStatus: status }
+        : item));
+      setRoutineToRun(null);
+      toast.add({ title: "Routine started", description: `${routine.name} is running now.`, type: "success" });
+    } catch (runError) {
+      toast.add({
+        title: "Could not start routine",
+        description: axios.isAxiosError<{ error?: string }>(runError)
+          ? runError.response?.data?.error ?? "Please try again."
+          : "Please try again.",
+        type: "error",
+      });
+    } finally {
+      setStartingRunId(null);
+    }
   };
 
   const deleteRoutine = async () => {
@@ -152,10 +238,39 @@ export default function ScheduleTab() {
                       <span className={`size-1.5 rounded-full ${routine.isActive ? "bg-emerald-500" : "bg-slate-400"}`} aria-hidden="true" />
                       {routine.isActive ? "Active" : "Inactive"}
                     </span>
+                    {routine.runStatus && (
+                      <span className={`ml-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        ["queued", "running"].includes(routine.runStatus)
+                          ? "bg-blue-50 text-blue-700"
+                          : routine.runStatus === "completed"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-red-50 text-red-700"
+                      }`}>
+                        {["queued", "running"].includes(routine.runStatus)
+                          ? <Loader className="size-3 animate-spin" />
+                          : routine.runStatus === "completed"
+                            ? <CheckCircle2 className="size-3" />
+                            : <XCircle className="size-3" />}
+                        {routine.runStatus === "queued" ? "Starting" : routine.runStatus === "running" ? "Executing" : routine.runStatus === "completed" ? "Completed" : "Failed"}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-2 text-[13px] leading-6 text-slate-600">{routine.goal}</p>
                 </div>
-                <details className="group relative shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`Run ${routine.name} now`}
+                    title="Run now"
+                    disabled={Boolean(startingRunId || deletingId || updatingStatusId || ["queued", "running"].includes(routine.runStatus ?? ""))}
+                    onClick={() => setRoutineToRun(routine)}
+                    className="flex size-9 items-center justify-center rounded-xl text-blue-700 transition hover:bg-blue-50 hover:text-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {["queued", "running"].includes(routine.runStatus ?? "")
+                      ? <Loader className="size-4 animate-spin" />
+                      : <Play className="size-4 fill-current" />}
+                  </button>
+                <details className="group relative">
                   <summary aria-label={`Options for ${routine.name}`} className="flex size-9 cursor-pointer list-none items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-blue-800 [&::-webkit-details-marker]:hidden">
                     <Ellipsis className="size-[21px]" />
                   </summary>
@@ -179,6 +294,7 @@ export default function ScheduleTab() {
                     </button>
                   </div>
                 </details>
+                </div>
               </div>
 
               <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-blue-50/80 px-3 py-2.5 text-[12px] leading-5 text-blue-950 ring-1 ring-blue-100/70">
@@ -193,6 +309,34 @@ export default function ScheduleTab() {
           ))}
         </ul>
       )}
+
+      <AlertDialog
+        open={Boolean(routineToRun)}
+        onOpenChange={(open) => {
+          if (!open && !startingRunId) setRoutineToRun(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Run this routine now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              “{routineToRun?.name}” will start immediately and may use its connected tools. You can’t start it again while it is running.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(startingRunId)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              disabled={Boolean(startingRunId)}
+              onClick={() => void runRoutine()}
+              className="bg-blue-800 text-white hover:bg-blue-900"
+            >
+              {startingRunId ? <Loader className="size-4 animate-spin" /> : <Play className="size-4 fill-current" />}
+              Run now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={Boolean(routineToDelete)}

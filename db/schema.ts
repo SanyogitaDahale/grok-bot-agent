@@ -1,4 +1,4 @@
-import { pgTable, varchar, serial, text, integer, timestamp, boolean, jsonb, } from "drizzle-orm/pg-core";
+import { pgTable, varchar, serial, text, integer, timestamp, boolean, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 // import { boolean } from "zod";
 
 export const users = pgTable("users", {
@@ -47,6 +47,25 @@ export const Routines = pgTable("routines", {
   nextRunAt: timestamp("next_run_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const RoutineExecutions = pgTable("routine_executions", {
+  id: varchar("id").primaryKey(),
+  routineId: varchar("routine_id").notNull().references(() => Routines.id, { onDelete: "cascade" }),
+  agentId: varchar("agent_id").notNull().references(() => AgentConfig.agentid, { onDelete: "cascade" }),
+  userEmail: text("user_email").notNull().references(() => users.email, { onDelete: "cascade" }),
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+  runType: varchar("run_type", { length: 20 }).notNull().default("scheduled"),
+  status: varchar("status", { length: 20 }).notNull().default("queued"),
+  result: jsonb("result"),
+  error: text("error"),
+  queuedAt: timestamp("queued_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  routineScheduledUnique: uniqueIndex("routine_executions_routine_scheduled_unique").on(table.routineId, table.scheduledFor),
+  statusScheduledIndex: index("routine_executions_status_scheduled_idx").on(table.status, table.scheduledFor),
+}));
 
 
 

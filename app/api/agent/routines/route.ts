@@ -1,11 +1,13 @@
 import { db } from "@/db";
-import { AgentConfig, Routines, Tools } from "@/db/schema";
+import { AgentConfig, RoutineExecutions, Routines, Tools } from "@/db/schema";
 import { routineSchema } from "@/lib/openai/agent-response-schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
+import { getNextRoutineOccurrence } from "@/lib/inngest/routine-schedule";
+import { inngest } from "@/lib/inngest/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,7 +28,36 @@ export async function GET(req: NextRequest) {
       .where(and(eq(Routines.agentId, agentId), eq(Routines.userEmail, userEmail)))
       .orderBy(desc(Routines.createdAt));
 
-    return NextResponse.json({ routines });
+    const executions = routines.length === 0
+      ? []
+      : await db
+          .select({
+            id: RoutineExecutions.id,
+            routineId: RoutineExecutions.routineId,
+            status: RoutineExecutions.status,
+            runType: RoutineExecutions.runType,
+          })
+          .from(RoutineExecutions)
+          .where(and(
+            eq(RoutineExecutions.userEmail, userEmail),
+            eq(RoutineExecutions.runType, "manual"),
+            inArray(RoutineExecutions.routineId, routines.map((routine) => routine.id)),
+          ))
+          .orderBy(desc(RoutineExecutions.queuedAt));
+    const latestManualRuns = new Map<string, (typeof executions)[number]>();
+    for (const execution of executions) {
+      if (!latestManualRuns.has(execution.routineId)) {
+        latestManualRuns.set(execution.routineId, execution);
+      }
+    }
+
+    return NextResponse.json({
+      routines: routines.map((routine) => ({
+        ...routine,
+        runExecutionId: latestManualRuns.get(routine.id)?.id ?? null,
+        runStatus: latestManualRuns.get(routine.id)?.status ?? null,
+      })),
+    });
   } catch (error) {
     console.error("Failed to load routines:", error);
     return NextResponse.json({ error: "Failed to load routines" }, { status: 500 });
@@ -136,8 +167,17 @@ export async function POST(req: NextRequest) {
         instructions: parsedRoutine.data.instructions,
         schedule: parsedRoutine.data.schedule,
         tools: attachedTools,
+        nextRunAt: getNextRoutineOccurrence(parsedRoutine.data.schedule, new Date()),
       })
       .returning();
+
+    await inngest.send({
+      id: `schedule-routine-${routine.id}-${crypto.randomUUID()}`,
+      name: "agent/routines.schedule",
+      data: { agentId: routine.agentId },
+    }).catch((error) => {
+      console.error("Failed to trigger routine scheduling scan:", error);
+    });
 
     return NextResponse.json({ routine, toolCards: attachedTools }, { status: 201 });
   } catch (error) {
