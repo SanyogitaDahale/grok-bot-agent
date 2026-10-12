@@ -7,6 +7,9 @@ import {
 import { getComposio } from "@/lib/composio/composio";
 import { createAgent, buildAgentInstructions } from "@/lib/openai/openai-agent";
 import { agentResponseSchema } from "@/lib/openai/agent-response-schema";
+import { createAgentVmTaskTool } from "@/lib/e2b/agent-task-tool";
+import { VM_IDLE_PAUSE_EVENT } from "@/lib/e2b/agent-desktop";
+import { Sandbox } from "@e2b/desktop";
 import { run } from "@openai/agents";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { NonRetriableError } from "inngest";
@@ -314,6 +317,51 @@ export const pruneExpiredAgentChatHistory = inngest.createFunction(
   },
 );
 
+export const pauseIdleAgentVm = inngest.createFunction(
+  {
+    id: "pause-idle-agent-vm",
+    name: "Pause Idle Agent VM Desktop",
+    retries: 2,
+  },
+  { event: VM_IDLE_PAUSE_EVENT },
+  async ({ event, step }) => {
+    const { agentId, userEmail, lastActiveAt } = event.data as {
+      agentId?: string;
+      userEmail?: string;
+      lastActiveAt?: string;
+    };
+    if (!agentId || !userEmail || !lastActiveAt) return { status: "invalid-event" };
+
+    const idleAt = new Date(new Date(lastActiveAt).getTime() + 2 * 60 * 1000);
+    if (!Number.isFinite(idleAt.getTime())) return { status: "invalid-event" };
+    await step.sleepUntil("wait-for-vm-idle-timeout", idleAt.toISOString());
+
+    return step.run("pause-agent-vm-if-still-idle", async () => db.transaction(async (tx) => {
+      const [agent] = await tx.select({
+        e2bSandboxId: AgentConfig.e2bSandboxId,
+        e2bSandboxStatus: AgentConfig.e2bSandboxStatus,
+        e2bLastActiveAt: AgentConfig.e2bLastActiveAt,
+      }).from(AgentConfig).where(and(
+        eq(AgentConfig.agentid, agentId),
+        eq(AgentConfig.userEmail, userEmail),
+      )).for("update");
+
+      if (!agent?.e2bSandboxId || agent.e2bSandboxStatus !== "active") return { status: "not-active" };
+      if (agent.e2bLastActiveAt?.toISOString() !== new Date(lastActiveAt).toISOString()) return { status: "activity-rescheduled" };
+
+      await Sandbox.betaPause(agent.e2bSandboxId);
+      await tx.update(AgentConfig).set({
+        e2bSandboxStatus: "paused",
+        e2bPausedAt: new Date(),
+      }).where(and(
+        eq(AgentConfig.agentid, agentId),
+        eq(AgentConfig.userEmail, userEmail),
+      ));
+      return { status: "paused" };
+    }));
+  },
+);
+
 export const executeScheduledRoutine = inngest.createFunction(
   {
     id: "execute-scheduled-routine",
@@ -425,6 +473,7 @@ export const executeScheduledRoutine = inngest.createFunction(
           userEmail: AgentConfig.userEmail,
           name: AgentConfig.name,
           description: AgentConfig.description,
+          isActive: AgentConfig.isActive,
           tools: AgentConfig.tools,
           composioSessionId: AgentConfig.composioSessionId,
         })
@@ -435,6 +484,7 @@ export const executeScheduledRoutine = inngest.createFunction(
         ))
         .limit(1);
       if (!agent) return cancel("The routine's agent no longer exists.");
+      if (!agent.isActive) return cancel("The agent is inactive.");
 
       const routineTools = parseRoutineTools(routine.tools);
 
@@ -539,6 +589,7 @@ export const executeScheduledRoutine = inngest.createFunction(
       const composioSession = await getComposio().sessions.use(prepared.sessionId);
       aiTools = await composioSession.tools();
     }
+    aiTools.push(createAgentVmTaskTool(claim.agent.agentid, claim.agent.userEmail));
 
     const result = await step.run("run-routine-agent-workflow", async () => {
       const schedule = claim.routine.schedule as RoutineSchedule;
@@ -550,7 +601,7 @@ export const executeScheduledRoutine = inngest.createFunction(
         `Task instructions: ${claim.routine.instructions}`,
         `This occurrence is scheduled for ${claim.scheduledFor} (${schedule.timezone}); the configured local time is ${schedule.time}.`,
         `Required tools: ${availableTools.map((tool) => tool.slug).join(", ") || "none"}.`,
-        "Follow the task instructions in order. Use only the required connected tools. Wait for each tool result before taking the next action, and do not claim an action succeeded unless a tool result confirms it. Honor any requested external delivery destination from the task instructions. Do not create or modify a routine. Return a concise report of what you completed or what prevented completion; the report will also be saved to this agent's chat history so the user can review it later.",
+        "Follow the task instructions in order. Use the required connected tools first; if they cannot perform a browser task, use this agent's persistent VM desktop. If the VM requests sign-in, tell the user to log in through VM Desktop and preserve that as the next step. Wait for each tool result before taking the next action, and do not claim an action succeeded unless a tool result confirms it. Honor any requested external delivery destination from the task instructions. Do not create or modify a routine. Return a concise report of what you completed or what prevented completion; the report will also be saved to this agent's chat history so the user can review it later.",
       ].join("\n\n");
       const instructions = [
         buildAgentInstructions(
@@ -560,7 +611,7 @@ export const executeScheduledRoutine = inngest.createFunction(
           schedule.timezone,
           connectedToolSlugs,
         ),
-        "Scheduled execution mode: perform the user's saved task now using the available tools. Return type=\"message\", with questions=[], suggestedTools=[], and routine=null. Do not ask for clarification; report any missing information or tool failure instead.",
+        "Scheduled execution mode: perform the user's saved task now using the available tools. Return type=\"message\", with questions=[], suggestedTools=[], and routine=null. Do not ask for clarification; report any missing information, login requirement, or tool failure instead.",
       ].join("\n\n");
       const agent = createAgent(claim.agent.name, instructions, aiTools);
       const agentResult = await run(agent, prompt);

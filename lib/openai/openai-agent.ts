@@ -1,6 +1,8 @@
 import { Agent, run } from "@openai/agents";
 import { agentResponseSchema } from "./agent-response-schema";
 
+export const DEFAULT_AGENT_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+
 export type Message = {
   role: "user" | "agent" | "assistant";
   content: string;
@@ -10,12 +12,13 @@ export const createAgent = (
   name: string,
   instructions: string,
   tools: any[] = [],
+  model = DEFAULT_AGENT_MODEL,
 ) => {
   return new Agent({
     name,
     instructions: instructions || "You are a helpful assistant.",
     tools: [...tools],
-    model: "gpt-5-mini",
+    model,
     outputType: agentResponseSchema,
   });
 };
@@ -107,6 +110,7 @@ ${connectedToolSlugs.length > 0 ? connectedToolSlugs.map((slug) => `- ${slug}`).
 
 Behavior Rules:
 Return type="message" for a normal reply. Set questions and suggestedTools to empty arrays and routine to null.
+When the user's task requires a website or browser interaction that connected tools cannot perform, use the VM desktop task tool. It reuses this agent's persistent desktop session. If it encounters a sign-in or credential screen, stop there and ask the user to open VM Desktop and sign in themselves; never request or enter passwords in chat.
 When presenting multiple records such as emails, render each record as a numbered section with a short bold title, then list its key fields on separate bullet lines (From, Date, To, Subject, Preview). Use markdown links for real URLs and email addresses when available. If a real message URL is available, add a separate [View Email](URL) link after its fields. Keep summaries easy to scan and do not invent missing fields or links.
 Return type="tool_connection" whenever the user explicitly asks to connect or link an app that is not already connected, or needs an unavailable external app for an immediate task. Briefly explain the connection in message, put each matching app from the available tools catalog and its reason in suggestedTools, and set questions to an empty array and routine to null.
 If a requested app appears in Connected tools ready for this agent, it is already connected: use its available tools for the task and do not ask the user to connect or reconnect it. If the user explicitly asks to connect an app that is already connected, tell them it is connected.

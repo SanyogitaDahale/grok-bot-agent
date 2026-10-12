@@ -41,7 +41,7 @@ export default function CreateAgent() {
       });
 
       console.log(result.data);
-      router.push('/workspave/' + newAgentID)
+      router.replace(`/workspace/${encodeURIComponent(newAgentID)}`)
     }
     catch (error) {
       console.error('Failed to create agent:', error);

@@ -1,7 +1,7 @@
 
 import { db } from "@/db";
 import { AgentChatHistory, AgentConfig, Routines, Tools } from "@/db/schema";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, asc, eq, gt, lt } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "../../auth/[...nextauth]/route";
@@ -19,11 +19,15 @@ import type { AgentResponse } from "@/lib/openai/agent-response-schema";
 import { routineSchema } from "@/lib/openai/agent-response-schema";
 import { FALLBACK_TOOLKITS } from "@/lib/composio/tool-catalog";
 import { runRoutineImmediately, RoutineRunError } from "@/lib/inngest/run-routine";
+import { createAgentVmTaskTool } from "@/lib/e2b/agent-task-tool";
 import {
   appendAgentChatMessages,
   filterUnexpiredMessages,
   getChatHistoryExpiry,
 } from "@/lib/agent-chat-history";
+
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   try {
@@ -74,6 +78,32 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("Failed to load agent chat history:", error);
     return NextResponse.json({ error: "Failed to load chat history" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email;
+    if (!userEmail) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const agentId = req.nextUrl.searchParams.get("agentId");
+    if (!agentId?.trim()) return NextResponse.json({ error: "An agent ID is required" }, { status: 400 });
+
+    const [agent] = await db.select({ agentid: AgentConfig.agentid }).from(AgentConfig).where(and(
+      eq(AgentConfig.agentid, agentId),
+      eq(AgentConfig.userEmail, userEmail),
+    )).limit(1);
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+
+    await db.delete(AgentChatHistory).where(and(
+      eq(AgentChatHistory.agentId, agentId),
+      eq(AgentChatHistory.userEmail, userEmail),
+    ));
+    return NextResponse.json({ reset: true });
+  } catch (error) {
+    console.error("Failed to reset agent chat history:", error);
+    return NextResponse.json({ error: "Could not reset this agent's conversation" }, { status: 500 });
   }
 }
 
@@ -156,7 +186,7 @@ export async function POST(req: NextRequest) {
       const messageId = crypto.randomUUID();
       await appendAgentChatMessages({
         agentId,
-        userEmail: session.user.email!,
+        userEmail: session.user!.email!,
         messages: [{
           id: messageId,
           role: "agent",
@@ -416,7 +446,7 @@ The user is changing this routine, not creating a second one. Preserve all field
         agentConfig.name,
         [agentConfig.description ?? "", routineEditInstructions].filter(Boolean).join("\n\n"),
         chatMessages,
-        agentComposioTools,
+        [...agentComposioTools, createAgentVmTaskTool(agentId, session.user.email)],
         toolsCatalog,
         typeof timezone === "string" ? timezone : "UTC",
         connectedToolSlugs,

@@ -10,6 +10,7 @@ export type AgentConfigType = {
     userEmail: string;
     composioSessionId: string,
     tools: any,
+    isActive?: boolean,
     
 }
 

@@ -15,8 +15,13 @@ export const AgentConfig = pgTable('agentConfig', {
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   agentImage: text('agentImage'),
+  isActive: boolean('is_active').notNull().default(true),
   tools: jsonb('tools'),
   composioSessionId: varchar("composioSessionId"),
+  e2bSandboxId: varchar("e2bSandboxId"),
+  e2bSandboxStatus: varchar("e2bSandboxStatus", { length: 20 }).notNull().default("inactive"),
+  e2bLastActiveAt: timestamp("e2b_last_active_at", { withTimezone: true }),
+  e2bPausedAt: timestamp("e2b_paused_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   userEmail: text('userEmail').notNull().references(() => users.email)
 

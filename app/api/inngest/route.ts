@@ -5,6 +5,7 @@ import {
   scheduleRoutineExecutions,
   executeScheduledRoutine,
   pruneExpiredAgentChatHistory,
+  pauseIdleAgentVm,
 } from '@/lib/inngest/functions';
 
 // Create an API route that serves Inngest functions
@@ -15,5 +16,6 @@ export const { GET, POST, PUT } = serve({
     scheduleRoutineExecutions,
     executeScheduledRoutine,
     pruneExpiredAgentChatHistory,
+    pauseIdleAgentVm,
   ],
 });

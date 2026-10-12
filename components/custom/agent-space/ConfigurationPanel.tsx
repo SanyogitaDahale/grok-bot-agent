@@ -5,7 +5,7 @@ import ScheduleTab from './ScheduleTab';
 import SettingsTab from './SettingsTab';
 import ToolsTab from './ToolsTab';
 import ExecutionHistoryTab from './ExecutionHistoryTab';
-import type { AgentConfigTab } from './agent-data';
+import { AGENT_CONFIG_UPDATED_EVENT, type AgentConfigTab } from './agent-data';
 import { useContext } from 'react';
 import { AgentConfigContext } from '@/context/AgentConfigContext';
 import { toast } from '@/components/ui/toast';
@@ -56,7 +56,12 @@ export default function ConfigurationPanel({
         ...agentConfig,
         agentId: window.location.pathname.split('/').pop(),
       });
-      
+
+      const updatedAgent = result.data.agentConfig;
+      if (updatedAgent) {
+        setAgentConfig((current: typeof agentConfig) => current ? { ...current, ...updatedAgent } : current);
+        window.dispatchEvent(new CustomEvent(AGENT_CONFIG_UPDATED_EVENT, { detail: updatedAgent }));
+      }
 
       toast.add({
         title: "Agent Configuration Saved",

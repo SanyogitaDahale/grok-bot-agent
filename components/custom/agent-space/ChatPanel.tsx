@@ -11,6 +11,7 @@ import { AgentConfigContext } from "@/context/AgentConfigContext";
 import type { AgentConfigType } from "@/type/agent";
 import type { AgentResponse } from "@/lib/openai/agent-response-schema";
 import type { ToolSuggestionCardData } from "@/type/Message";
+import { AGENT_CHAT_RESET_EVENT } from "./agent-data";
 import { EDIT_ROUTINE_EVENT, ROUTINE_RUN_EVENT, type SavedRoutine } from "./routine-events";
 
 function AgentMessage({
@@ -264,12 +265,15 @@ export default function ChatPanel({ onOpenConfiguration }: { onOpenConfiguration
   ]);
   const [historyReady, setHistoryReady] = useState(false);
   const historyCursor = useRef<string | null>(null);
+  const historyVersion = useRef(0);
 
   const syncChatHistory = useCallback(async () => {
     if (!agentId) return;
+    const requestVersion = historyVersion.current;
     const { data } = await axios.get<{ messages: MessageType[] }>("/api/agent/chat", {
       params: { agentId, ...(historyCursor.current ? { afterId: historyCursor.current } : {}) },
     });
+    if (requestVersion !== historyVersion.current) return;
     if (data.messages.length === 0) return;
 
     const incoming = data.messages.map((message) => ({
@@ -288,17 +292,18 @@ export default function ChatPanel({ onOpenConfiguration }: { onOpenConfiguration
     if (!agentId) return;
     setHistoryReady(false);
     historyCursor.current = null;
+    const requestVersion = historyVersion.current;
     let cancelled = false;
     axios.get<{ messages: MessageType[] }>("/api/agent/chat", { params: { agentId } })
       .then(({ data }) => {
-        if (!cancelled && data.messages.length > 0) {
+        if (!cancelled && requestVersion === historyVersion.current && data.messages.length > 0) {
           historyCursor.current = data.messages[data.messages.length - 1].id;
           setMessages(data.messages.map((message) => ({
             ...message,
             time: new Date(message.time).toLocaleTimeString(),
           })));
         }
-        else if (!cancelled) setMessages([{
+        else if (!cancelled && requestVersion === historyVersion.current) setMessages([{
           id: "Hello! Welcome to Orbit",
           role: "agent",
           content: "Hello! I am Agent, how can I help you today?",
@@ -308,6 +313,27 @@ export default function ChatPanel({ onOpenConfiguration }: { onOpenConfiguration
       .catch((error) => console.error("Could not load agent chat history:", error))
       .finally(() => { if (!cancelled) setHistoryReady(true); });
     return () => { cancelled = true; };
+  }, [agentId]);
+
+  useEffect(() => {
+    const resetConversation = (event: Event) => {
+      const resetAgentId = (event as CustomEvent<{ agentId?: string }>).detail?.agentId;
+      if (resetAgentId !== agentId) return;
+      historyVersion.current += 1;
+      historyCursor.current = null;
+      setUserInput("");
+      setEditingRoutine(null);
+      setMessages([{
+        id: "Hello! Welcome to Orbit",
+        role: "agent",
+        content: "Hello! I am Agent, how can I help you today?",
+        time: "Just now",
+      }]);
+      setHistoryReady(true);
+    };
+
+    window.addEventListener(AGENT_CHAT_RESET_EVENT, resetConversation);
+    return () => window.removeEventListener(AGENT_CHAT_RESET_EVENT, resetConversation);
   }, [agentId]);
 
   useEffect(() => {

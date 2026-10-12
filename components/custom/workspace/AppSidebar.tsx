@@ -12,6 +12,8 @@ import {
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { AgentConfigType } from '@/type/agent';
+import MarketplaceDialog from './MarketplaceDialog';
+import { AGENT_CONFIG_UPDATED_EVENT } from '@/components/custom/agent-space/agent-data';
 
 function AppSidebar() {
     const path = usePathname();
@@ -28,10 +30,24 @@ function AppSidebar() {
     const avatar = session?.user?.image;
 
     const [agents, setAgents] = useState<AgentConfigType[]>([]);
+    const [marketplaceOpen, setMarketplaceOpen] = useState(false);
 
     useEffect(() => {
         getUserAgents();
     }, [path]);
+
+    useEffect(() => {
+        const syncUpdatedAgent = (event: Event) => {
+            const updatedAgent = (event as CustomEvent<Partial<AgentConfigType>>).detail;
+            if (!updatedAgent?.agentid) return;
+            setAgents((current) => current.map((agent) => agent.agentid === updatedAgent.agentid
+                ? { ...agent, ...updatedAgent }
+                : agent));
+        };
+
+        window.addEventListener(AGENT_CONFIG_UPDATED_EVENT, syncUpdatedAgent);
+        return () => window.removeEventListener(AGENT_CONFIG_UPDATED_EVENT, syncUpdatedAgent);
+    }, []);
 
     const getUserAgents = async () => {
         try {
@@ -128,10 +144,13 @@ function AppSidebar() {
             </nav>
 
             <div className="mt-5 border-t border-slate-100 pt-4">
-                <Link
-                    href="/marketplace"
+                <button
+                    type="button"
                     title="Marketplace"
-                    className={`mb-3 flex items-center justify-center gap-3 rounded-lg px-1 py-2.5 transition hover:bg-slate-50 lg:justify-start lg:px-2.5 ${path === '/marketplace'
+                    aria-haspopup="dialog"
+                    aria-expanded={marketplaceOpen}
+                    onClick={() => setMarketplaceOpen(true)}
+                    className={`mb-3 flex w-full items-center justify-center gap-3 rounded-lg px-1 py-2.5 text-left transition hover:bg-slate-50 lg:justify-start lg:px-2.5 ${marketplaceOpen
                             ? 'bg-slate-100 font-medium text-slate-950'
                             : 'text-slate-600 hover:text-slate-950'
                         }`}
@@ -142,7 +161,7 @@ function AppSidebar() {
                     />
 
                     <span className="hidden lg:inline">Marketplace</span>
-                </Link>
+                </button>
 
                 <div className="flex items-center justify-center gap-3 rounded-lg px-0 py-2 lg:justify-start lg:px-2">
                     {avatar ? (
@@ -169,6 +188,12 @@ function AppSidebar() {
                     </div>
                 </div>
             </div>
+            <MarketplaceDialog
+                open={marketplaceOpen}
+                onOpenChange={setMarketplaceOpen}
+                agents={agents}
+                currentAgentId={path.match(/^\/workspace\/([^/]+)/)?.[1]}
+            />
         </aside>
     );
 }

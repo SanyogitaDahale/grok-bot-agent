@@ -14,6 +14,9 @@ import {
 
 export type AgentConfigTab = 'settings' | 'tools' | 'schedule' | 'agent-settings' | 'execution-history';
 
+export const AGENT_CONFIG_UPDATED_EVENT = 'orbit:agent-config-updated';
+export const AGENT_CHAT_RESET_EVENT = 'orbit:agent-chat-reset';
+
 export const AGENT_AVATAR_URL = 'https://api.dicebear.com/10.x/gaze/svg?tags=animation&seed=Orbit-Assistant';
 
 export const CONNECTABLE_TOOLS = [
