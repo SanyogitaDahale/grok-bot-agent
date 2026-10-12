@@ -1,471 +1,152 @@
-'use client'
-import React from 'react';
+'use client';
+
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
-import { Button } from '@/components/ui/button'
-export default function Home() {
+import {
+  ArrowRight,
+  CalendarClock,
+  Check,
+  Layers3,
+  MessageSquareText,
+  Sparkles,
+  WandSparkles,
+  Workflow,
+} from 'lucide-react';
 
-  const { data } = useSession();
-  
-  console.log(data);
+const features = [
+  {
+    icon: MessageSquareText,
+    title: 'Give every task an agent',
+    description: 'Create focused assistants with their own instructions, conversation, and workspace.',
+    tint: 'bg-blue-50 text-blue-700 ring-blue-100',
+  },
+  {
+    icon: Layers3,
+    title: 'Bring your tools together',
+    description: 'Connect the apps you already use and let your agents work across them.',
+    tint: 'bg-violet-50 text-violet-700 ring-violet-100',
+  },
+  {
+    icon: CalendarClock,
+    title: 'Keep work moving',
+    description: 'Turn repeatable work into scheduled routines and review each run in one place.',
+    tint: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  },
+];
+
+export default function Home() {
+  const { data: session, status } = useSession();
+  const isSignedIn = status === 'authenticated';
 
   return (
-    <>
-    <h1>Hello</h1>
-    <Button onClick={() => signOut()}>Signout</Button>
-    
-    </>
-    
+    <main className="min-h-screen overflow-hidden bg-white text-slate-950">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[780px] bg-[radial-gradient(ellipse_at_50%_0%,rgba(219,234,254,0.78),transparent_67%)]" />
+      <header className="relative z-10 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl">
+        <nav aria-label="Main navigation" className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
+          <Link href="/" className="flex items-center gap-2.5" aria-label="Orbit home">
+            <img src="/logo.png" alt="" className="size-9 rounded-xl" />
+            <span className="text-xl font-semibold tracking-tight">Orbit</span>
+          </Link>
+          <div className="hidden items-center gap-8 md:flex">
+            <a href="#features" className="text-sm font-medium text-slate-600 transition hover:text-slate-950">Features</a>
+            <a href="#how-it-works" className="text-sm font-medium text-slate-600 transition hover:text-slate-950">How it works</a>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {isSignedIn ? <>
+              {session?.user?.name && <span className="hidden text-xs font-medium text-slate-500 lg:inline">Hi, {session.user.name.split(' ')[0]}</span>}
+              <Link href="/workspace" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Open workspace</Link>
+              <button type="button" onClick={() => void signOut({ callbackUrl: '/' })} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:px-4">Sign out</button>
+            </> : <>
+              <Link href="/sign-in" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Sign in</Link>
+              <Link href="/sign-up" className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-800 px-3.5 text-sm font-semibold text-white shadow-sm shadow-blue-900/15 transition hover:bg-blue-900 sm:px-4">Create account <ArrowRight className="size-4" /></Link>
+            </>}
+          </div>
+        </nav>
+      </header>
+
+      <section className="relative z-10 mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14 lg:pb-28 lg:pt-24">
+        <div className="mx-auto max-w-xl text-center lg:mx-0 lg:text-left">
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-800 shadow-sm"><span className="flex size-5 items-center justify-center rounded-full bg-blue-100"><Sparkles className="size-3" /></span> Your workspace for agentic work</div>
+          <h1 className="mt-6 text-[clamp(2.75rem,6vw,4.5rem)] font-semibold leading-[1.02] tracking-[-0.055em] text-slate-950">Automate Routine Tasks. <span className="bg-gradient-to-r from-blue-700 via-indigo-600 to-violet-600 bg-clip-text text-transparent">Focus on What Matters.</span></h1>
+          <p className="mx-auto mt-6 max-w-lg text-base leading-7 text-slate-600 sm:text-lg sm:leading-8 lg:mx-0">Create AI agents for the work you repeat. Give them the right tools, set a schedule, and keep every run organized in one workspace.</p>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
+            <Link href={isSignedIn ? '/workspace' : '/sign-up'} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-800 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-900/15 transition hover:-translate-y-0.5 hover:bg-blue-900">{isSignedIn ? 'Open your workspace' : 'Build your first agent'} <ArrowRight className="size-4" /></Link>
+          </div>
+          <div className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs font-medium text-slate-500 lg:justify-start">
+            <span className="inline-flex items-center gap-1.5"><Check className="size-3.5 text-emerald-600" /> Set up in minutes</span>
+            <span className="inline-flex items-center gap-1.5"><Check className="size-3.5 text-emerald-600" /> Connect your existing apps</span>
+          </div>
+        </div>
+
+        <div className="relative mx-auto w-full max-w-[620px] lg:mx-0 lg:ml-auto">
+          <div className="absolute -inset-4 rounded-[34px] bg-gradient-to-br from-blue-200/50 via-indigo-100/40 to-violet-200/50 blur-2xl" />
+          <img
+            src="/orbit-workspace-preview.svg"
+            alt="Orbit workspace showing an active research assistant and a scheduled project digest"
+            className="relative h-auto w-full rounded-[24px] border border-slate-200/90 shadow-[0_28px_80px_rgba(30,64,175,0.14)]"
+          />
+        </div>
+      </section>
+
+      <section id="features" className="relative z-10 border-y border-slate-200/80 bg-slate-50/70 py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">A calmer way to get things done</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">From a simple prompt to a reliable workflow</h2>
+            <p className="mt-4 text-sm leading-6 text-slate-600 sm:text-base">Orbit gives your AI agents a home, the tools to take action, and a schedule to keep work moving.</p>
+          </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            {features.map(({ icon: Icon, title, description, tint }, index) => (
+              <article key={title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_4px_16px_rgba(15,23,42,0.035)] sm:p-7">
+                <div className="flex items-center justify-between"><span className={`flex size-11 items-center justify-center rounded-xl ring-1 ${tint}`}><Icon className="size-5" /></span><span className="text-xs font-semibold text-slate-300">0{index + 1}</span></div>
+                <h3 className="mt-5 text-base font-semibold tracking-tight text-slate-900">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" className="relative z-10 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
+        <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">How it works</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">A capable teammate, shaped around your work.</h2>
+            <p className="mt-4 text-sm leading-6 text-slate-600 sm:text-base">Start with a goal. Orbit helps you set up an agent, choose its connected apps, and decide when a routine should run.</p>
+            <Link href={isSignedIn ? '/workspace' : '/sign-up'} className="mt-7 inline-flex h-11 items-center gap-2 rounded-xl bg-blue-800 px-4 text-sm font-semibold text-white transition hover:bg-blue-900">{isSignedIn ? 'Open your workspace' : 'Create your workspace'} <ArrowRight className="size-4" /></Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StepCard number="01" icon={WandSparkles} title="Describe the work" text="Give your agent a name and explain what you need." />
+            <StepCard number="02" icon={Layers3} title="Connect the tools" text="Authorize the apps your agent can use to take action." />
+            <StepCard number="03" icon={Workflow} title="Let it run" text="Chat whenever you need—or schedule repeatable work." />
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-slate-200 bg-slate-50/70">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-7 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <Link href="/" className="inline-flex items-center gap-2 font-semibold text-slate-700"><img src="/logo.png" alt="" className="size-6 rounded-md" />Orbit</Link>
+          <span>Make room for work that matters.</span>
+          {isSignedIn
+            ? <button type="button" onClick={() => void signOut({ callbackUrl: '/' })} className="text-left font-semibold text-blue-800 hover:text-blue-950">Sign out <ArrowRight className="ml-1 inline size-3.5" /></button>
+            : <Link href="/sign-in" className="font-semibold text-blue-800 hover:text-blue-950">Sign in to your workspace <ArrowRight className="ml-1 inline size-3.5" /></Link>}
+        </div>
+      </footer>
+    </main>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  wrapper: {
-    minHeight: '100vh',
-    backgroundColor: '#09090b',
-    color: '#fafafa',
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    position: 'relative',
-    overflowX: 'hidden',
-  },
-  glowTopLeft: {
-    position: 'absolute',
-    top: '-150px',
-    left: '-150px',
-    width: '500px',
-    height: '500px',
-    background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%)',
-    pointerEvents: 'none',
-  },
-  glowTopRight: {
-    position: 'absolute',
-    top: '-150px',
-    right: '-150px',
-    width: '500px',
-    height: '500px',
-    background: 'radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 70%)',
-    pointerEvents: 'none',
-  },
-  navbar: {
-    position: 'sticky',
-    top: 0,
-    zIndex: 50,
-    backdropFilter: 'blur(12px)',
-    backgroundColor: 'rgba(9, 9, 11, 0.8)',
-    borderBottom: '1px solid rgba(39, 39, 42, 0.8)',
-  },
-  navContainer: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '1rem 1.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  brand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.6rem',
-    textDecoration: 'none',
-    color: '#fafafa',
-  },
-  brandIcon: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '1rem',
-    fontWeight: 700,
-  },
-  brandText: {
-    fontSize: '1.2rem',
-    fontWeight: 800,
-    letterSpacing: '-0.02em',
-  },
-  brandVersion: {
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    padding: '0.15rem 0.45rem',
-    borderRadius: '9999px',
-    backgroundColor: '#27272a',
-    color: '#38bdf8',
-    border: '1px solid #3f3f46',
-  },
-  navLinks: {
-    display: 'flex',
-    gap: '1.75rem',
-    alignItems: 'center',
-  },
-  navLink: {
-    color: '#a1a1aa',
-    textDecoration: 'none',
-    fontSize: '0.9rem',
-    fontWeight: 500,
-    transition: 'color 0.2s',
-  },
-  navAuth: {
-    display: 'flex',
-    gap: '0.75rem',
-    alignItems: 'center',
-  },
-  signInBtn: {
-    color: '#fafafa',
-    textDecoration: 'none',
-    fontSize: '0.875rem',
-    fontWeight: 500,
-    padding: '0.5rem 1rem',
-    borderRadius: '8px',
-    transition: 'background-color 0.2s',
-  },
-  getStartedNavBtn: {
-    backgroundColor: '#38bdf8',
-    color: '#09090b',
-    textDecoration: 'none',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    padding: '0.5rem 1rem',
-    borderRadius: '8px',
-    transition: 'opacity 0.2s',
-  },
-  heroSection: {
-    maxWidth: '1000px',
-    margin: '0 auto',
-    padding: '5rem 1.5rem 4rem 1.5rem',
-    textAlign: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-  },
-  heroBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.4rem 1rem',
-    borderRadius: '9999px',
-    backgroundColor: 'rgba(39, 39, 42, 0.6)',
-    border: '1px solid #3f3f46',
-    fontSize: '0.825rem',
-    fontWeight: 500,
-    color: '#e4e4e7',
-    marginBottom: '2rem',
-  },
-  badgePulse: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    backgroundColor: '#38bdf8',
-    boxShadow: '0 0 8px #38bdf8',
-  },
-  heroTitle: {
-    fontSize: 'clamp(2.5rem, 5vw, 4.25rem)',
-    fontWeight: 800,
-    lineHeight: 1.15,
-    letterSpacing: '-0.035em',
-    margin: '0 0 1.5rem 0',
-  },
-  gradientText: {
-    background: 'linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-  },
-  heroSubtitle: {
-    fontSize: 'clamp(1rem, 2vw, 1.25rem)',
-    color: '#a1a1aa',
-    lineHeight: 1.6,
-    maxWidth: '720px',
-    margin: '0 0 2.5rem 0',
-  },
-  ctaGroup: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '1rem',
-    justifyContent: 'center',
-    marginBottom: '3.5rem',
-  },
-  primaryCta: {
-    padding: '0.85rem 2rem',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, #38bdf8, #60a5fa)',
-    color: '#09090b',
-    fontWeight: 700,
-    fontSize: '1rem',
-    textDecoration: 'none',
-    boxShadow: '0 10px 25px -5px rgba(56, 189, 248, 0.4)',
-    transition: 'transform 0.2s, box-shadow 0.2s',
-  },
-  secondaryCta: {
-    padding: '0.85rem 2rem',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(24, 24, 27, 0.8)',
-    border: '1px solid #3f3f46',
-    color: '#fafafa',
-    fontWeight: 600,
-    fontSize: '1rem',
-    textDecoration: 'none',
-    transition: 'background-color 0.2s, border-color 0.2s',
-  },
-  terminalBox: {
-    width: '100%',
-    maxWidth: '480px',
-    backgroundColor: '#18181b',
-    border: '1px solid #27272a',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-    marginBottom: '4rem',
-  },
-  terminalHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '0.6rem 1rem',
-    backgroundColor: '#121214',
-    borderBottom: '1px solid #27272a',
-  },
-  dotRed: { width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ef4444' },
-  dotYellow: { width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#eab308' },
-  dotGreen: { width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e' },
-  terminalTitle: { marginLeft: 'auto', fontSize: '0.75rem', color: '#71717a' },
-  terminalContent: {
-    padding: '1rem 1.25rem',
-    fontFamily: 'monospace',
-    fontSize: '0.925rem',
-    display: 'flex',
-    gap: '0.75rem',
-    alignItems: 'center',
-    textAlign: 'left',
-  },
-  terminalPrompt: { color: '#38bdf8', fontWeight: 700 },
-  terminalCommand: { color: '#e4e4e7' },
-  stackBanner: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '1rem',
-    width: '100%',
-  },
-  stackLabel: {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    letterSpacing: '0.1em',
-    color: '#71717a',
-  },
-  stackPills: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '0.6rem',
-    justifyContent: 'center',
-  },
-  stackPill: {
-    fontSize: '0.8rem',
-    fontWeight: 500,
-    color: '#a1a1aa',
-    backgroundColor: 'rgba(24, 24, 27, 0.7)',
-    border: '1px solid #27272a',
-    padding: '0.4rem 0.85rem',
-    borderRadius: '9999px',
-  },
-  featuresSection: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '5rem 1.5rem',
-  },
-  sectionHeader: {
-    textAlign: 'center',
-    maxWidth: '700px',
-    margin: '0 auto 3.5rem auto',
-  },
-  sectionBadge: {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    letterSpacing: '0.1em',
-    color: '#38bdf8',
-    marginBottom: '0.5rem',
-    display: 'block',
-  },
-  sectionTitle: {
-    fontSize: 'clamp(1.75rem, 3.5vw, 2.5rem)',
-    fontWeight: 800,
-    letterSpacing: '-0.025em',
-    margin: '0 0 1rem 0',
-  },
-  sectionSubtitle: {
-    fontSize: '1rem',
-    color: '#a1a1aa',
-    lineHeight: 1.6,
-    margin: 0,
-  },
-  featuresGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '1.5rem',
-  },
-  featureCard: {
-    backgroundColor: '#18181b',
-    border: '1px solid #27272a',
-    borderRadius: '16px',
-    padding: '2rem',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
-    transition: 'border-color 0.2s, transform 0.2s',
-  },
-  featureIconBox: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '12px',
-    backgroundColor: '#27272a',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '1.5rem',
-    marginBottom: '1.25rem',
-  },
-  featureTitle: {
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    margin: '0 0 0.75rem 0',
-    color: '#fafafa',
-  },
-  featureDescription: {
-    fontSize: '0.9rem',
-    color: '#a1a1aa',
-    lineHeight: 1.6,
-    margin: '0 0 1.5rem 0',
-  },
-  featureTag: {
-    marginTop: 'auto',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#38bdf8',
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-    border: '1px solid rgba(56, 189, 248, 0.2)',
-    padding: '0.25rem 0.6rem',
-    borderRadius: '6px',
-    alignSelf: 'flex-start',
-  },
-  stepsSection: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '2rem 1.5rem 5rem 1.5rem',
-  },
-  stepsCard: {
-    backgroundColor: '#121215',
-    border: '1px solid #27272a',
-    borderRadius: '20px',
-    padding: '3rem 2rem',
-    textAlign: 'center',
-  },
-  stepsTitle: {
-    fontSize: '1.75rem',
-    fontWeight: 800,
-    marginBottom: '2.5rem',
-  },
-  stepsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-    gap: '2rem',
-    textAlign: 'left',
-  },
-  stepItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-  },
-  stepNumber: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '50%',
-    backgroundColor: '#38bdf8',
-    color: '#09090b',
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '1.1rem',
-    marginBottom: '0.5rem',
-  },
-  stepHeading: {
-    fontSize: '1.15rem',
-    fontWeight: 700,
-    margin: 0,
-    color: '#fafafa',
-  },
-  stepText: {
-    fontSize: '0.875rem',
-    color: '#a1a1aa',
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  ctaBannerSection: {
-    maxWidth: '1000px',
-    margin: '0 auto',
-    padding: '0 1.5rem 5rem 1.5rem',
-  },
-  ctaBanner: {
-    background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
-    border: '1px solid rgba(56, 189, 248, 0.3)',
-    borderRadius: '20px',
-    padding: '3.5rem 2rem',
-    textAlign: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  ctaBannerTitle: {
-    fontSize: 'clamp(1.75rem, 3vw, 2.25rem)',
-    fontWeight: 800,
-    margin: 0,
-  },
-  ctaBannerText: {
-    fontSize: '1rem',
-    color: '#a1a1aa',
-    maxWidth: '550px',
-    margin: 0,
-  },
-  ctaBannerButtons: {
-    marginTop: '1rem',
-  },
-  ctaBannerBtn: {
-    backgroundColor: '#38bdf8',
-    color: '#09090b',
-    fontWeight: 700,
-    fontSize: '1rem',
-    padding: '0.85rem 2rem',
-    borderRadius: '10px',
-    textDecoration: 'none',
-    boxShadow: '0 10px 20px -5px rgba(56, 189, 248, 0.4)',
-  },
-  footer: {
-    borderTop: '1px solid #27272a',
-    backgroundColor: '#09090b',
-    padding: '2.5rem 1.5rem',
-  },
-  footerContainer: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '1rem',
-    textAlign: 'center',
-  },
-  footerBrand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  footerCopyright: {
-    fontSize: '0.875rem',
-    color: '#71717a',
-    margin: 0,
-  },
-  authorLink: {
-    color: '#a1a1aa',
-    textDecoration: 'underline',
-  },
-};
+function StepCard({ number, icon: Icon, title, text }: {
+  number: string;
+  icon: typeof WandSparkles;
+  title: string;
+  text: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+      <div className="flex items-center justify-between"><Icon className="size-5 text-blue-700" /><span className="text-xs font-semibold text-slate-300">{number}</span></div>
+      <h3 className="mt-5 text-sm font-semibold text-slate-900">{title}</h3>
+      <p className="mt-2 text-xs leading-5 text-slate-500">{text}</p>
+    </article>
+  );
+}

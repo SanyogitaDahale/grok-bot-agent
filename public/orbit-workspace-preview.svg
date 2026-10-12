@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 788 589" fill="none">
+  <defs>
+    <linearGradient id="page" x1="394" y1="0" x2="394" y2="589" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFF"/>
+      <stop offset="1" stop-color="#F1F5FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#334155" flood-opacity=".10"/>
+    </filter>
+  </defs>
+  <rect width="788" height="589" rx="32" fill="url(#page)"/>
+  <rect x="9.5" y="6.5" width="769" height="576" rx="28" fill="#fff" stroke="#E2E8F0"/>
+  <path d="M10 37C10 20.431 23.431 7 40 7h709c16.569 0 30 13.431 30 30v29H10V37Z" fill="#fff"/>
+  <path d="M10 66.5h768" stroke="#E7EDF6"/>
+  <circle cx="36" cy="37" r="6" fill="#FCA5A5"/><circle cx="56" cy="37" r="6" fill="#FCD34D"/><circle cx="76" cy="37" r="6" fill="#6EE7B7"/>
+  <text x="102" y="42" fill="#52627A" font-family="Arial, sans-serif" font-size="14">Orbit workspace</text>
+  <circle cx="746" cy="37" r="18" fill="#EFF6FF"/><text x="741" y="42" fill="#1D4ED8" font-family="Arial, sans-serif" font-size="13" font-weight="700">O</text>
+  <path d="M74.5 67v515" stroke="#E8EEF7"/>
+  <rect x="22" y="92" width="40" height="40" rx="12" fill="#1D4ED8"/>
+  <path d="m42 101 2.4 6.1 6.1 2.4-6.1 2.4L42 118l-2.4-6.1-6.1-2.4 6.1-2.4L42 101Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="m51 98 1.2 3.1 3.1 1.2-3.1 1.2L51 108l-1.2-3.1-3.1-1.2 3.1-1.2L51 98Z" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>
+  <rect x="24" y="152" width="35" height="35" rx="12" fill="#DBEAFE"/>
+  <rect x="24" y="207" width="35" height="35" rx="12" fill="#F8FAFC"/>
+  <rect x="24" y="262" width="35" height="35" rx="12" fill="#F8FAFC"/>
+  <text x="105" y="111" fill="#1D4ED8" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.7">YOUR WORKSPACE</text>
+  <text x="105" y="147" fill="#0F172A" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="-.5">A team that keeps moving</text>
+  <rect x="614" y="96" width="138" height="30" rx="15" fill="#ECFDF5"/>
+  <circle cx="630" cy="111" r="4" fill="#10B981"/>
+  <text x="641" y="115" fill="#047857" font-family="Arial, sans-serif" font-size="12" font-weight="600">All systems ready</text>
+  <g filter="url(#shadow)">
+    <rect x="105" y="181" width="316" height="217" rx="23" fill="#fff" stroke="#D7E6FF" stroke-width="1.4"/>
+    <rect x="436" y="181" width="317" height="217" rx="23" fill="#fff" stroke="#E2E8F0" stroke-width="1.4"/>
+    <rect x="105" y="413" width="648" height="138" rx="23" fill="#fff" stroke="#E2E8F0" stroke-width="1.4"/>
+  </g>
+  <rect x="126" y="202" width="45" height="45" rx="16" fill="#EFF6FF"/>
+  <path d="m148 211 2.2 5.4 5.4 2.2-5.4 2.2-2.2 5.4-2.2-5.4-5.4-2.2 5.4-2.2 2.2-5.4Z" stroke="#1D4ED8" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="m160 208 1.2 3 3 1.2-3 1.2-1.2 3-1.2-3-3-1.2 3-1.2 1.2-3Z" stroke="#1D4ED8" stroke-width="1.2"/>
+  <rect x="349" y="211" width="51" height="27" rx="13.5" fill="#ECFDF5"/><text x="359" y="228" fill="#047857" font-family="Arial, sans-serif" font-size="11" font-weight="600">Active</text>
+  <text x="126" y="281" fill="#0F172A" font-family="Arial, sans-serif" font-size="17" font-weight="700">Research assistant</text>
+  <text x="126" y="307" fill="#64748B" font-family="Arial, sans-serif" font-size="13">Finds the important details and shares a clear</text>
+  <text x="126" y="328" fill="#64748B" font-family="Arial, sans-serif" font-size="13">summary.</text>
+  <rect x="126" y="347" width="30" height="30" rx="10" fill="#FEF2F2"/><text x="137" y="366" fill="#DC2626" font-family="Arial, sans-serif" font-size="11" font-weight="700">M</text>
+  <rect x="163" y="347" width="30" height="30" rx="10" fill="#F5F3FF"/><text x="174" y="366" fill="#6D28D9" font-family="Arial, sans-serif" font-size="11" font-weight="700">S</text>
+  <text x="201" y="366" fill="#64748B" font-family="Arial, sans-serif" font-size="12">2 tools connected</text>
+  <rect x="457" y="202" width="45" height="45" rx="16" fill="#F5F3FF"/>
+  <rect x="469" y="212" width="21" height="19" rx="4" stroke="#7C3AED" stroke-width="1.7"/>
+  <path d="M474 209v6m11-6v6m-16 1h21m-12 3 2 2 4-5" stroke="#7C3AED" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="513" y="228" fill="#94A3B8" font-family="Arial, sans-serif" font-size="12" font-weight="600">UP NEXT</text>
+  <text x="457" y="281" fill="#0F172A" font-family="Arial, sans-serif" font-size="17" font-weight="700">Weekly project digest</text>
+  <text x="457" y="307" fill="#64748B" font-family="Arial, sans-serif" font-size="13">Every Monday  ·  9:00 AM</text>
+  <path d="m460 337 4 4 8-9" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="482" y="342" fill="#1D4ED8" font-family="Arial, sans-serif" font-size="12" font-weight="600">Routine scheduled</text>
+  <circle cx="148" cy="455" r="20" fill="#FFFBEB"/>
+  <path d="m142 445 12 10-6 1-2 6-4-17Z" stroke="#D97706" stroke-width="1.8" stroke-linejoin="round"/>
+  <text x="176" y="451" fill="#0F172A" font-family="Arial, sans-serif" font-size="15" font-weight="700">A little help, right on time</text>
+  <text x="176" y="472" fill="#64748B" font-family="Arial, sans-serif" font-size="12">Chat with an agent or let a routine run in the background.</text>
+  <rect x="126" y="490" width="605" height="40" rx="13" fill="#F8FAFC" stroke="#D8E0EC"/>
+  <text x="142" y="515" fill="#94A3B8" font-family="Arial, sans-serif" font-size="12">Ask your agent to take care of something...</text>
+  <circle cx="704" cy="510" r="13" fill="#1D4ED8"/>
+  <path d="M698 510h11m-4-4 4 4-4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

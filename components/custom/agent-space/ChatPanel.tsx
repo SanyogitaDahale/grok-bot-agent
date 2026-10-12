@@ -1,5 +1,5 @@
 "use client";
-import {ArrowUp, Copy, Loader, MoreHorizontal, RefreshCw, Settings2, Sparkles,} from "lucide-react";
+import {ArrowUp, Copy, Loader, RefreshCw, Settings2, Sparkles,} from "lucide-react";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { AGENT_AVATAR_URL } from "./agent-data";
@@ -97,13 +97,6 @@ function ChatHeader({ agentConfig, onOpenConfiguration }: { agentConfig: AgentCo
         >
           <span className="ml-auto size-[18px] rounded-full bg-white shadow-sm" />
         </span>
-        <button
-          type="button"
-          aria-label="More chat options"
-          className="ml-1 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-        >
-          <MoreHorizontal className="size-5" />
-        </button>
         <button
           type="button"
           aria-label="Open agent configuration"
